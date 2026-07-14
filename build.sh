@@ -84,6 +84,11 @@ else
     echo "Architecture: riscv64"
 fi
 
+# Never read from a terminal/stdin: when run detached (no controlling tty), a
+# `make` that hits a missing .config symbol would block waiting for input and
+# silently hang the build. Force stdin closed for the whole script.
+exec < /dev/null
+
 # ccache: cache compiled objects so kernel version bumps only recompile the
 # files that actually changed. We wrap ONLY the compiler via CC=... (never
 # CROSS_COMPILE, which is also used for ld/objcopy/etc that ccache can't wrap).
@@ -195,7 +200,7 @@ if [ "$NEED_DOWNLOAD" = "1" ]; then
 fi
 
 cd "$KERNEL_DIR"
-echo "Kernel version: $(make kernelrelease 2>/dev/null || echo 'unknown')"
+echo "MARK1A: KERNEL_OUT=$KERNEL_OUT OUTDIR=$OUTDIR PATCHES_DIR=$PATCHES_DIR"
 
 # Per-architecture output directories so a parallel matrix build (riscv + arm64)
 # never clobbers each other's kernel / DTB / image. (Previously both arches
@@ -208,10 +213,21 @@ PATCH_LOG="/project/images/${ARCH_TARGET}/patch-report.txt"
 KBUILD_LOG="/project/images/${ARCH_TARGET}/kernel-build.log"
 
 # Patches must ONLY be applied on a pristine tree. Re-applying on an already
-# patched tree corrupts source files. Use a stamp keyed to version/board/arch
-# so an existing prepared tree is reused for a fast incremental rebuild.
+# patched tree corrupts source files. Key the stamp on a hash of the patch set
+# AND the defconfig, so changing either one forces a clean re-prepare (and a
+# `make mrproper` to drop any build artifacts left over from a previous set,
+# e.g. a board DTB that was removed). This keeps the persistent kernel-source
+# volume correct across patch edits instead of leaving stale incremental state.
 PREPARE_STAMP="$KERNEL_DIR/.alpine-milkv-prepared"
-WANT_PREPARE="${LATEST_STABLE}:${BOARD}:${ARCH_TARGET}"
+if [ "${ARCH_TARGET}" = "riscv" ]; then
+    DEFCONFIG_SRC="/project/kernel/${KERNEL_DEFCONFIG}"
+else
+    DEFCONFIG_SRC="/project/kernel/configs/arm64-slim.config"
+fi
+PREPARE_HASH=$( ( ls -1 "$PATCHES_DIR"/*.patch 2>/dev/null; cat "$PATCHES_DIR"/*.patch 2>/dev/null; \
+                  cat "$DEFCONFIG_SRC" 2>/dev/null ) | md5sum | cut -d' ' -f1 )
+echo "MARK1B: PATCHES_DIR=$PATCHES_DIR DEFCONFIG_SRC=$DEFCONFIG_SRC HASH=$PREPARE_HASH"
+WANT_PREPARE="${LATEST_STABLE}:${BOARD}:${ARCH_TARGET}:${PREPARE_HASH}"
 if [ "$(cat "$PREPARE_STAMP" 2>/dev/null)" = "$WANT_PREPARE" ]; then
     echo ""
     echo "=== Source already patched & configured for $WANT_PREPARE (incremental) ==="
@@ -221,8 +237,12 @@ if [ "$(cat "$PREPARE_STAMP" 2>/dev/null)" = "$WANT_PREPARE" ]; then
 else
     SKIP_PREPARE=0
 fi
+echo "MARK1C: SKIP_PREPARE=$SKIP_PREPARE"
 
 if [ "$SKIP_PREPARE" = "0" ]; then
+# Clean any build artifacts left from a previous (different) patch set so a
+# removed board DTB or symbol doesn't break the incremental build.
+make mrproper </dev/null >/dev/null 2>&1 || true
 # Apply out-of-tree patches
 echo ""
 echo "=== Applying patches ==="
@@ -258,15 +278,14 @@ fi
 echo ""
 echo "Patch summary: $APPLIED applied, $SKIPPED skipped"
 
-# Ensure our arm64 board DTB is registered in the sophgo Makefile
-# (the patch's Makefile hunk may fail to apply across kernel versions)
-if [ "$ARCH_TARGET" = "arm64" ]; then
-    SOPHGO_MK="arch/arm64/boot/dts/sophgo/Makefile"
-    rm -f "${SOPHGO_MK}.rej"
-    if [ -f "$SOPHGO_MK" ] && ! grep -q "sg2002-milkv-duo-256m.dtb" "$SOPHGO_MK"; then
-        echo 'dtb-$(CONFIG_ARCH_SOPHGO) += sg2002-milkv-duo-256m.dtb' >> "$SOPHGO_MK"
-        echo "  Registered sg2002-milkv-duo-256m.dtb in $SOPHGO_MK"
-    fi
+# Ensure our board DTB is registered in the sophgo Makefile for this arch
+# (the patch's Makefile hunk may fail to apply across kernel versions). This runs
+# for both riscv and arm64 so the Duo 256M DTB is always built.
+SOPHGO_MK="arch/${ARCH_TARGET}/boot/dts/sophgo/Makefile"
+rm -f "${SOPHGO_MK}.rej"
+if [ -f "$SOPHGO_MK" ] && ! grep -q "sg2002-milkv-duo-256m.dtb" "$SOPHGO_MK"; then
+    echo 'dtb-$(CONFIG_ARCH_SOPHGO) += sg2002-milkv-duo-256m.dtb' >> "$SOPHGO_MK"
+    echo "  Registered sg2002-milkv-duo-256m.dtb in $SOPHGO_MK"
 fi
 echo "" >> "$PATCH_LOG"
 echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
@@ -321,17 +340,20 @@ fi  # end SKIP_PREPARE guard
 
 echo "Building kernel with $JOBS jobs..."
 # Build the kernel Image and modules first (these are required).
-make -j"$JOBS" $KMAKE_CC Image modules > "$KBUILD_LOG" 2>&1 || {
+make -j"$JOBS" $KMAKE_CC Image modules </dev/null > "$KBUILD_LOG" 2>&1 || {
     echo "!!! Kernel Image/modules build FAILED. Last 40 lines:"
     tail -40 "$KBUILD_LOG"
     exit 1
 }
-# Build device trees. A single out-of-tree board DTS that doesn't apply cleanly
-# against the latest vanilla kernel must NOT abort the whole build: QEMU 'virt'
-# supplies its own DTB, so a boot test still works. Failures are logged.
-if ! make -j"$JOBS" $KMAKE_CC dtbs >> "$KBUILD_LOG" 2>&1; then
-    echo "  WARNING: 'make dtbs' reported errors (some board DTBs may be missing)."
-    echo "  WARNING: dtbs build had errors" >> "$PATCH_LOG"
+# Build the board device tree. We build ONLY the target board DTB (not the full
+# `make dtbs`, which compiles every Sophgo board and aborts on any single broken
+# sibling DTS against newer kernels). The board DTB is what ships in the image's
+# boot partition; QEMU 'virt' supplies its own DTB for the boot test. The DTB
+# make target is the path relative to arch/<arch>/boot/dts/ (e.g. sophgo/...).
+BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
+if [ "$ARCH_TARGET" = "riscv" ] && ! make -j"$JOBS" $KMAKE_CC "$BOARD_DTB" </dev/null >> "$KBUILD_LOG" 2>&1; then
+    echo "  WARNING: board DTB build reported errors."
+    echo "  WARNING: board DTB build had errors" >> "$PATCH_LOG"
 fi
 tail -5 "$KBUILD_LOG"
 
@@ -381,7 +403,7 @@ cp -r "$KERNEL_OUT/dtb" $ROOTFS_DIR/boot/ 2>/dev/null || true
 
 echo "Running second-stage setup..."
 cp scripts/second-stage.sh $ROOTFS_DIR/
-cp scripts/first-boot.sh $ROOTFS_DIR/
+cp -r packages $ROOTFS_DIR/packages 2>/dev/null || true
 
 # Mount proc/sys/dev for chroot
 mount -t proc proc $ROOTFS_DIR/proc 2>/dev/null || true

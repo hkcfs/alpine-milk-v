@@ -12,6 +12,7 @@ set -u
 ARCH="${1:?arch required (riscv|arm64)}"
 IMG="${2:?image path required}"
 KERNEL="${3:-}"
+BUILD_LOG="${4:-}"
 
 if [ "$ARCH" = "riscv" ]; then
     QEMU=$(command -v qemu-system-riscv64)
@@ -64,9 +65,13 @@ for i in $(seq 1 30); do
     sleep 5
 done
 
-# Emit a single fenced code block: boot log + diagnostics.
+# Emit a single fenced code block: build log (if provided) + boot log + diagnostics.
 echo '```'
-echo "===== AUTO BUILD BOOT TEST ($ARCH) ====="
+echo "===== AUTO BUILD + BOOT TEST ($ARCH) ====="
+if [ -n "$BUILD_LOG" ] && [ -f "$BUILD_LOG" ]; then
+    echo "----- Build log (build.sh) -----"
+    cat "$BUILD_LOG"
+fi
 echo "----- QEMU console (boot) -----"
 cat "$LOGBASE.log"
 echo "----- SSH diagnostics -----"

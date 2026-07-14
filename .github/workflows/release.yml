@@ -38,14 +38,16 @@ jobs:
             -v "${{ github.workspace }}/.kernel-src:/project/kernel/linux" \
             -v "${{ github.workspace }}/.ccache:/project/.ccache" \
             ghcr.io/${{ github.repository }}/builder:latest \
-            bash /project/build.sh --arch ${{ matrix.arch }} duo256m
+            bash /project/build.sh --arch ${{ matrix.arch }} duo256m \
+            > "outputs/${{ matrix.arch }}/build.log" 2>&1
 
-      - name: Capture boot proof
+      - name: Capture build + boot proof
         run: |
           IMAGE="outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img"
           KERNEL="outputs/kernel-${{ matrix.arch }}/Image"
           [ -f "$KERNEL" ] || KERNEL=""   # fall back to extracting from the image
-          sh scripts/capture-boot.sh "${{ matrix.arch }}" "$IMAGE" "$KERNEL" \
+          BUILD_LOG="outputs/${{ matrix.arch }}/build.log"
+          sh scripts/capture-boot.sh "${{ matrix.arch }}" "$IMAGE" "$KERNEL" "$BUILD_LOG" \
             > "outputs/boot-${{ matrix.arch }}.md"
 
       - name: Compress image for release
@@ -56,12 +58,15 @@ jobs:
           {
             echo "# Milk-V Duo 256M (${{ matrix.arch }}) — $(date +'%Y-%m')"
             echo
+            echo "Auto-built from the latest stable Linux kernel and Alpine Linux,"
+            echo "then booted in QEMU to prove it works (see the build + boot log below)."
+            echo
             echo "Flash with:"
             echo '```'
             echo "gzip -cd alpine-milkv-duo256m-${{ matrix.arch }}.img.gz | sudo dd of=/dev/sdX bs=4M status=progress"
             echo '```'
             echo
-            echo "### Boot proof (auto-captured in QEMU)"
+            echo "### Build + boot proof (auto-captured)"
             echo
             cat "outputs/boot-${{ matrix.arch }}.md"
           } > "outputs/notes-${{ matrix.arch }}.md"
@@ -75,7 +80,6 @@ jobs:
           prerelease: false
           files: |
             outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img.gz
-            outputs/boot-${{ matrix.arch }}.md
 
       - name: Upload boot log for combined notes
         uses: actions/upload-artifact@v4

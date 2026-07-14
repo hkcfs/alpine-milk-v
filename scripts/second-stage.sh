@@ -52,6 +52,31 @@ apk add --no-cache \
     htop \
     kmod
 
+# Install custom out-of-tree packages from the repo's packages/ tree.
+# packages/userspace/*.apk are installed into the rootfs; packages/kernel-modules
+# holds out-of-tree kernel modules (.ko) copied to the running kernel's module dir.
+if [ -d /packages ]; then
+    echo "Installing custom userspace packages..."
+    for apk_pkg in /packages/userspace/*.apk; do
+        [ -e "$apk_pkg" ] || continue
+        apk add --allow-untrusted --no-cache "$apk_pkg"
+    done
+
+    echo "Installing custom kernel modules..."
+    KVER=$(uname -r 2>/dev/null || true)
+    for ko in /packages/kernel-modules/*.ko; do
+        [ -e "$ko" ] || continue
+        if [ -n "$KVER" ] && [ -d "/lib/modules/$KVER" ]; then
+            mkdir -p "/lib/modules/$KVER/extra"
+            cp "$ko" "/lib/modules/$KVER/extra/"
+            depmod "$KVER" 2>/dev/null || true
+        else
+            mkdir -p /lib/modules/extra
+            cp "$ko" /lib/modules/extra/
+        fi
+    done
+fi
+
 echo "Configuring system..."
 
 # Set hostname
