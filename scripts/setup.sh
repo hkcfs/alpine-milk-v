@@ -5,11 +5,12 @@ set -e
 
 export DEBIAN_FRONTEND=noninteractive
 
-BUILD_DEPS=(qemu-user-static qemu-system-riscv64 binfmt-support dpkg-cross \
-  arch-test mmdebstrap fakechroot libfakeroot:riscv64 libfakechroot:riscv64 \
-  libconfuse-dev debhelper devscripts libssl-dev:riscv64 \
-  u-boot-tools gcc-riscv64-linux-gnu libc6-dev-riscv64-cross kmod \
-  pkg-config build-essential ninja-build automake autoconf autoconf-archive \
+BUILD_DEPS=(qemu-user-static binfmt-support dpkg-cross \
+  arch-test mmdebstrap fakechroot \
+  libconfuse-dev debhelper devscripts \
+  u-boot-tools gcc-riscv64-linux-gnu libc6-dev-riscv64-cross \
+  gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+  kmod pkg-config build-essential ninja-build automake autoconf autoconf-archive \
   libtool wget curl git gcc libssl-dev bc squashfs-tools android-sdk-libsparse-utils \
   jq python3-setuptools scons parallel tree python3-dev python3-pip device-tree-compiler ssh \
   cpio fakeroot flex bison libncurses5-dev genext2fs rsync unzip dosfstools mtools \
@@ -17,6 +18,7 @@ BUILD_DEPS=(qemu-user-static qemu-system-riscv64 binfmt-support dpkg-cross \
 MISSING_DEPS=()
 
 dpkg --add-architecture riscv64
+dpkg --add-architecture arm64
 cat >/etc/apt/sources.list.d/riscv64.sources <<EOF
 Types: deb
 URIs: http://ports.ubuntu.com/ubuntu-ports
@@ -26,12 +28,21 @@ Architectures: riscv64
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
 
+cat >/etc/apt/sources.list.d/arm64.sources <<EOF
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports
+Suites: noble noble-updates noble-backports noble-security
+Components: main restricted universe multiverse
+Architectures: arm64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+
 cat >/etc/apt/sources.list.d/ubuntu.sources <<EOF
 Types: deb
 URIs: http://archive.ubuntu.com/ubuntu/
-Suites: noble noble-updates noble-backports
+Suites: noble noble-updates noble-backports noble-security
 Components: main universe restricted multiverse
-Architectures: amd64  
+Architectures: amd64
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
 
@@ -63,14 +74,16 @@ if ! which genimage && [ -z $DOCKER_BUILD ];then
     echo "OK."
 fi
 
-# Register binfmt_misc for riscv64 emulation
+# Register binfmt_misc for riscv64 and aarch64 emulation
 if [ -n "$DOCKER_BUILD" ]; then
-    echo "Setting up binfmt_misc for riscv64..."
-    # Copy qemu binary to a persistent location
+    echo "Setting up binfmt_misc for riscv64 and aarch64..."
+    # Copy qemu binaries to persistent locations
     cp /usr/bin/qemu-riscv64-static /usr/local/bin/ 2>/dev/null || true
+    cp /usr/bin/qemu-aarch64-static /usr/local/bin/ 2>/dev/null || true
     # Register binfmt if not already done
     if [ ! -f /proc/sys/fs/binfmt_misc/qemu-riscv64 ]; then
         apt-get install -y --no-install-recommends binfmt-support qemu-user-static
         update-binfmts --enable qemu-riscv64 2>/dev/null || true
+        update-binfmts --enable qemu-aarch64 2>/dev/null || true
     fi
 fi

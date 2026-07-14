@@ -10,12 +10,12 @@ services:
       context: .
       dockerfile: Dockerfile
     image: alpine-milkv-builder:latest
-    container_name: alpine-milkv-builder
     depends_on:
       - binfmt
     privileged: true
     volumes:
       - ./images:/project/images
+      - kernel-src:/project/kernel/linux
     working_dir: /project
 
   shell:
@@ -23,3 +23,6 @@ services:
     stdin_open: true
     tty: true
     entrypoint: /bin/bash
+
+volumes:
+  kernel-src:
