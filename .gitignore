@@ -4,6 +4,8 @@ rootfs-riscv/
 rootfs-arm64/
 kernel/build/
 kernel/linux/
+# CI per-arch kernel source dirs (mounted into the builder container)
+.kernel-src-*/
 .cache/
 
 # Stray kernel/bootloader artifacts that can leak to the repo root if a build

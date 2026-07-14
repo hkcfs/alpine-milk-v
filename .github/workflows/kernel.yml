@@ -38,7 +38,10 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository }}/builder:latest
+          tags: |
+            ghcr.io/${{ github.repository }}/builder-riscv:latest
+            ghcr.io/${{ github.repository }}/builder-arm64:latest
+            ghcr.io/${{ github.repository }}/builder:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -60,12 +63,12 @@ jobs:
       - name: Build kernel (${{ matrix.arch }})
         run: |
           mkdir -p "outputs/${{ matrix.arch }}" "outputs/kernel-${{ matrix.arch }}"
-          docker pull ghcr.io/${{ github.repository }}/builder:latest
+          docker pull ghcr.io/${{ github.repository }}/builder-${{ matrix.arch }}:latest
           docker run --rm --privileged \
             -v "${{ github.workspace }}/outputs:/project/images" \
-            -v "${{ github.workspace }}/.kernel-src:/project/kernel/linux" \
+            -v "${{ github.workspace }}/.kernel-src-${{ matrix.arch }}:/project/kernel/linux" \
             -v "${{ github.workspace }}/.ccache:/project/.ccache" \
-            ghcr.io/${{ github.repository }}/builder:latest \
+            ghcr.io/${{ github.repository }}/builder-${{ matrix.arch }}:latest \
             bash /project/build.sh --arch ${{ matrix.arch }} duo256m
 
       - name: Package kernel artifacts
