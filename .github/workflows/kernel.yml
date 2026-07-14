@@ -11,10 +11,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: kernel-${{ matrix.arch }}
-  cancel-in-progress: false
-
 jobs:
   # Build & push the prebaked builder image first so the kernel jobs always get
   # a valid image (no race / no fragile inline `docker build` fallback).
@@ -48,6 +44,9 @@ jobs:
   kernel:
     needs: build-builder
     runs-on: ubuntu-latest
+    concurrency:
+      group: kernel-${{ matrix.arch }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
