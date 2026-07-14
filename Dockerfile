@@ -16,4 +16,5 @@ COPY build.sh /project/
 COPY scripts/ /project/scripts/
 COPY genimage.cfg /project/
 COPY milkv-bootloader /project/milkv-bootloader/
+COPY kernel/ /project/kernel/
 RUN chmod +x /project/build.sh /project/scripts/*.sh

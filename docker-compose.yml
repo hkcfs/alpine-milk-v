@@ -1,5 +1,4 @@
 services:
-  # Register binfmt for cross-arch builds (run once)
   binfmt:
     image: multiarch/qemu-user-static:register
     privileged: true

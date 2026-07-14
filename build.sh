@@ -6,6 +6,7 @@ DEFAULT_HNAME=milkv-alpine
 DEFAULT_PASSWORD=milkv
 ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 ALPINE_VERSION=v3.21
+KERNEL_VERSION=7.0
 OVERDRIVE=.od
 
 FLAG=$1
@@ -58,6 +59,7 @@ Selected Configuration:
     Board:          $BOARD
     Alpine Mirror:  $ALPINE_MIRROR
     Alpine Version: $ALPINE_VERSION
+    Kernel Version: $KERNEL_VERSION
     Hostname:       $HNAME
     Password:       $DISPLAY_PASSWORD
     CPU Overdrive:  $DISPLAY_OD
@@ -68,6 +70,56 @@ if [ "$BOARD" = "duos-wifi" ]; then
     WIRELESS="true"
     BOARD="duos"
 fi
+
+export ARCH=riscv
+export CROSS_COMPILE=riscv64-linux-gnu-
+JOBS=$(nproc)
+
+# ============================================
+# STEP 1: Build kernel
+# ============================================
+echo ""
+echo "=== Step 1: Building Linux $KERNEL_VERSION kernel ==="
+
+if [ ! -d /project/kernel/linux ]; then
+    echo "Cloning pre-patched Linux kernel for Milk-V Duo..."
+    git clone --depth=1 https://github.com/queenkjuul/linux.git \
+        /project/kernel/linux
+fi
+
+cd /project/kernel/linux
+
+echo "Kernel version: $(make kernelrelease 2>/dev/null || echo 'unknown')"
+
+# Use our defconfig
+echo "Configuring kernel..."
+cp /project/kernel/milkv-${BOARD}_defconfig .config
+
+echo "Building kernel with $JOBS jobs..."
+make olddefconfig 2>/dev/null
+
+echo "Verifying virtio config..."
+grep -E 'CONFIG_VIRTIO_BLK=|CONFIG_VIRTIO_NET=|CONFIG_VIRTIO_MMIO=|CONFIG_VIRTIO_CONSOLE=|CONFIG_SCSI_VIRTIO=' .config || echo "WARNING: virtio not in config!"
+
+make -j"$JOBS" Image modules dtbs 2>&1 | tail -5
+
+# Copy outputs
+echo "Copying kernel artifacts..."
+mkdir -p /project/images/kernel
+cp arch/riscv/boot/Image /project/images/kernel/
+
+# Copy DTBs
+mkdir -p /project/images/kernel/dtb/sophgo
+find arch/riscv/boot/dts -name "*.dtb" -exec cp {} /project/images/kernel/dtb/sophgo/ \; 2>/dev/null || true
+
+echo "Kernel built: $(ls -lh /project/images/kernel/Image | awk '{print $5}')"
+cd /project
+
+# ============================================
+# STEP 2: Build rootfs
+# ============================================
+echo ""
+echo "=== Step 2: Building Alpine rootfs ==="
 
 echo "Downloading Alpine minirootfs for riscv64..."
 rm -rf rootfs
@@ -80,6 +132,11 @@ wget -q -O /tmp/alpine-minirootfs.tar.gz \
 echo "Extracting rootfs..."
 tar -xzf /tmp/alpine-minirootfs.tar.gz -C rootfs
 rm /tmp/alpine-minirootfs.tar.gz
+
+# Copy kernel into rootfs boot
+mkdir -p rootfs/boot
+cp images/kernel/Image rootfs/boot/
+cp -r images/kernel/dtb rootfs/boot/ 2>/dev/null || true
 
 echo "Running second-stage setup..."
 cp scripts/second-stage.sh rootfs/
@@ -112,10 +169,21 @@ cleanup() {
 }
 cleanup
 
+# ============================================
+# STEP 3: Build SD card image
+# ============================================
+echo ""
+echo "=== Step 3: Building SD card image ==="
+
 echo -n "Installing Bootloader..."
 cp milkv-bootloader/$BOARD/fip.bin$OVERDRIVE images/fip.bin 2>/dev/null || \
     cp milkv-bootloader/$BOARD/fip.bin images/fip.bin
 echo "OK."
+
+# Copy kernel to boot partition for genimage
+mkdir -p images/boot
+cp images/kernel/Image images/boot/
+cp -r images/kernel/dtb images/boot/ 2>/dev/null || true
 
 echo "Setting root password"
 sed -i "s|^root:[^:]*:|root:$PASSWORD_HASH:|" ./rootfs/etc/shadow
@@ -126,4 +194,14 @@ dd if=/dev/zero of=images/swap.img bs=1M count=256 2>/dev/null
 mkswap images/swap.img >/dev/null
 fakeroot genimage --rootpath ./rootfs --config ./genimage.cfg --inputpath ./images
 mv images/alpine-milkv.img images/alpine-milkv-$BOARD.img
-echo "SD card image generated at ./images/alpine-milkv-$BOARD.img"
+
+echo ""
+echo "============================================"
+echo " BUILD COMPLETE!"
+echo "============================================"
+echo "Image: images/alpine-milkv-$BOARD.img"
+echo "Size:  $(ls -lh images/alpine-milkv-$BOARD.img | awk '{print $5}')"
+echo ""
+echo "Flash with:"
+echo "  sudo dd if=images/alpine-milkv-$BOARD.img of=/dev/sdX bs=4M status=progress"
+echo "============================================"

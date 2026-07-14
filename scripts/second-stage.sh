@@ -36,7 +36,9 @@ apk add --no-cache \
     parted \
     util-linux \
     chrony \
-    openrc
+    openrc \
+    udev \
+    udev-openrc
 
 echo "Installing network packages..."
 apk add --no-cache \
@@ -71,16 +73,16 @@ iface eth0 inet dhcp
 EOF
 
 # Enable services
+rc-update add udev sysinit 2>/dev/null || true
+rc-update add hwclock boot 2>/dev/null || true
 rc-update add sshd default 2>/dev/null || true
 rc-update add networking default 2>/dev/null || true
-rc-update add udev default 2>/dev/null || true
 rc-update add chronyd default 2>/dev/null || true
 
 # Configure fstab
 cat > /etc/fstab <<EOF
 # <file system>	<mount pt>	<type>	<options>	<dump>	<pass>
 /dev/root	/		ext4	rw,noatime	0	1
-/dev/mmcblk0p1	/boot	vfat	rw,noatime	0	2
 proc		/proc		proc	defaults	0	0
 devpts		/dev/pts	devpts	defaults,gid=5,mode=620,ptmxmode=0666	0	0
 tmpfs		/dev/shm	tmpfs	mode=0777	0	0
