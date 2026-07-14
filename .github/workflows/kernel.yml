@@ -1,0 +1,67 @@
+name: Weekly kernel build
+
+# Every week: build the latest stable Linux kernel for both arches. Always pulls
+# the newest kernel (build.sh fetches kernel.org latest), so a new kernel shows
+# up automatically. Publishes the Image + DTBs as a dated release.
+on:
+  schedule:
+    - cron: '23 3 * * 1'          # every Monday 03:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kernel-${{ matrix.arch }}
+  cancel-in-progress: false
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [riscv, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull prebaked builder image
+        run: docker pull ghcr.io/${{ github.repository }}/builder:latest
+
+      - name: Build kernel (${{ matrix.arch }})
+        run: |
+          docker run --rm --privileged \
+            -v "${{ github.workspace }}/outputs:/project/images" \
+            -v "${{ github.workspace }}/.kernel-src:/project/kernel/linux" \
+            -v "${{ github.workspace }}/.ccache:/project/.ccache" \
+            ghcr.io/${{ github.repository }}/builder:latest \
+            bash /project/build.sh --arch ${{ matrix.arch }} duo256m
+
+      - name: Package kernel artifacts
+        run: |
+          cd outputs
+          mkdir -p pkg
+          cp kernel-${{ matrix.arch }}/Image pkg/ 2>/dev/null || true
+          mkdir -p pkg/dtb/sophgo
+          cp kernel-${{ matrix.arch }}/dtb/sophgo/*.dtb pkg/dtb/sophgo/ 2>/dev/null || true
+          cp ${{ matrix.arch }}/patch-report.txt pkg/ 2>/dev/null || true
+          cp ${{ matrix.arch }}/kernel-build.log pkg/ 2>/dev/null || true
+          zip -r ../kernel-${{ matrix.arch }}.zip pkg/
+        working-directory: ${{ github.workspace }}
+
+      # CI runners are ephemeral, so named volumes don't persist between runs;
+      # mount the workspace dirs instead so the kernel source is reused within a run.
+
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: kernel-${{ matrix.arch }}.zip
+
+      - name: Publish weekly kernel release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-${{ matrix.arch }}-$(date +'%Y-%m-%d')
+          name: Kernel ${{ matrix.arch }} $(date +'%Y-%m-%d')
+          prerelease: false
+          files: kernel-${{ matrix.arch }}.zip

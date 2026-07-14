@@ -7,14 +7,14 @@ services:
 
   builder:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     image: alpine-milkv-builder:latest
     depends_on:
       - binfmt
     privileged: true
     volumes:
-      - ./images:/project/images
+      - ../outputs:/project/images
       - kernel-src:/project/kernel/linux
       - ccache:/project/.ccache
     working_dir: /project
@@ -27,4 +27,8 @@ services:
 
 volumes:
   kernel-src:
+    external: true
+    name: apline-milk-v_kernel-src
   ccache:
+    external: true
+    name: apline-milk-v_ccache

@@ -3,100 +3,103 @@
 ## Project Identity
 
 **Name:** alpine-milkv
-**Purpose:** Minimal Alpine Linux distribution for Milk-V Duo S and Duo 256M RISC-V SBCs
+**Purpose:** Minimal Alpine Linux distribution for the Milk-V Duo 256M (SG2002) SBC
 **Base:** Alpine Linux v3.24 (3.24.1)
 **Kernel:** Latest stable Linux (auto-fetched from kernel.org, currently 7.1.3) with Milk-V Duo patches
-**Target Hardware:** Sophgo CV1812H/SG2000/SG2002 (RISC-V 64)
+**Target Hardware:** Sophgo SG2002 (RISC-V C906 + ARM64 Cortex-A53, 256MB)
 
 ## Hardware Specifications
 
-### Milk-V Duo S
-- **CPU:** RISC-V CV1812H @ 1GHz
-- **RAM:** 512MB DDR3
-- **Storage:** microSD slot
-- **Network:** Ethernet, WiFi 2.4/5GHz, Bluetooth
-- **USB:** USB-C (device), USB-A (host)
-- **Audio:** I2S + analog output
-- **GPIO:** 26 pins
-
-### Milk-V Duo 256M
-- **CPU:** RISC-V CV1812H @ 1GHz  
+### Milk-V Duo 256M (the only supported board)
+- **CPU:** Sophgo SG2002 — RISC-V C906 @ 1GHz (riscv arch) **and** ARM64 Cortex-A53 (arm64 arch), switchable
 - **RAM:** 256MB DDR3
 - **Storage:** microSD slot
-- **USB:** USB-C only
+- **USB:** USB-C only (CDC-NCM device mode)
 - **GPIO:** 26 pins
 
 ## Build System
 
 ### Prerequisites
-- Docker and Docker Compose (ONLY requirement - nothing installed on host)
+- Docker, Docker Compose, and `tonistiigi/binfmt` (or `multiarch/qemu-user-static`) for arm64 emulation
 - ~10GB free disk space
 
 ### Build Commands
 ```bash
-# Build for Duo 256M (default)
+# Build the RISC-V image (default board: duo256m)
 docker compose run --rm builder bash /project/build.sh duo256m
 
-# Build for Duo S
-docker compose run --rm builder bash /project/build.sh duos
-
-# Build for Duo S with WiFi
-docker compose run --rm builder bash /project/build.sh duos-wifi
+# Build the ARM64 image
+docker compose run --rm builder bash /project/build.sh --arch arm64 duo256m
 ```
 
-### QEMU Testing
+Outputs land in `outputs/` (the compose `images` volume maps there):
+`outputs/alpine-milkv-duo256m-<arch>.img`, `outputs/kernel-<arch>/Image`,
+`outputs/<arch>/{boot,dtb,swap,fip}`.
+
+### QEMU Testing / Release Boot-Proof
 ```bash
-sudo qemu-system-riscv64 -machine virt -m 512M -nographic \
-  -kernel images/kernel/Image \
+# RISC-V (QEMU needs the build-time kernel, since /boot on the image is rootfs-mounted)
+sudo qemu-system-riscv64 -machine virt -m 256M -nographic \
+  -kernel outputs/kernel-riscv/Image \
+  -dtb    outputs/riscv/milkv-duo256m.dtb \
   -append 'console=ttyS0 root=/dev/vda3 rootwait rw' \
-  -drive file=images/alpine-milkv-duo256m.img,format=raw,if=none,id=hd0 \
-  -device virtio-blk-device,drive=hd0
+  -drive  file=outputs/alpine-milkv-duo256m-riscv.img,format=raw,if=none,id=hd0 \
+  -device virtio-blk-device,drive=hd0 \
+  -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net-device,netdev=net0
+
+# ARM64
+sudo qemu-system-aarch64 -machine virt -m 256M -cpu cortex-a53 -nographic \
+  -kernel outputs/kernel-arm64/Image \
+  -append 'console=ttyAMA0 root=/dev/vda3 rootwait rw' \
+  -drive  file=outputs/alpine-milkv-duo256m-arm64.img,format=raw,if=none,id=hd0 \
+  -device virtio-blk-device,drive=hd0 \
+  -netdev user,id=net0,hostfwd=tcp::2223-:22 -device virtio-net-device,netdev=net0
 ```
+The `scripts/capture-boot.sh <arch> <img> <kernel>` wrapper runs this and writes
+the full boot log + SSH diagnostics to a fenced code block for the release notes.
 
 ## Project Structure
 ```
 alpine-milk-v/
 ├── SOUL.md                    # This file
 ├── build.sh                   # Main build script (kernel + rootfs + image)
-├── docker-compose.yml         # Docker build environment
-├── Dockerfile                 # Build container (Ubuntu 24.04 + RISC-V cross-tools)
+├── Makefile                   # Convenience wrappers (make build-image)
+├── docker/
+│   ├── Dockerfile             # Build container (Ubuntu 24.04 + riscv/arm64 cross-tools)
+│   ├── docker-compose.yml     # binfmt + builder services
+│   └── .dockerignore
 ├── genimage.cfg               # SD card partition layout
 ├── scripts/
 │   ├── second-stage.sh        # Alpine rootfs configuration
 │   ├── first-boot.sh          # First boot setup (partition expand, SSH keys)
-│   └── setup.sh               # Build container dependencies
+│   ├── setup.sh               # Build container dependencies (+ ccache)
+│   └── capture-boot.sh        # QEMU boot proof for releases
 ├── kernel/
-│   ├── milkv-duos_defconfig   # Kernel config for Duo S
-│   ├── milkv-duo256m_defconfig # Kernel config for Duo 256M
-│   └── patches/               # 37 out-of-tree patches for CV18XX
+│   ├── milkv-duo256m_defconfig # RISC-V kernel config
+│   ├── configs/arm64-slim.config # ARM64 config trim
+│   ├── patches/               # RISC-V out-of-tree patches for CV18XX/SG200X
+│   └── patches-arm64/         # ARM64 board DTS
 ├── milkv-bootloader/
-│   ├── duos/fip.bin           # Vendor bootloader for Duo S
-│   └── duo256m/fip.bin        # Vendor bootloader for Duo 256M
-└── images/                    # Output directory
-    ├── alpine-milkv-*.img     # SD card images
-    ├── patch-report.txt       # Patch application report
-    └── kernel/                # Built kernel Image + DTBs
-```
+│   ├── duo256m/               # RISC-V fip.bin
+│   └── duo256m-arm64/         # ARM64 (Cortex-A53) fip.bin
+├── packages/                  # Custom out-of-tree packages
+│   ├── kernel-modules/
+│   └── userspace/
+└── outputs/                   # Build artifacts (git-ignored)
 
 ## Build Behavior
 
 ### Automatic Kernel Management
 - **Always fetches latest stable kernel** from kernel.org
 - If version changes, re-downloads and re-patches
-- Applies 37 out-of-tree patches automatically
-- Failed/skipped patches are logged to `images/patch-report.txt`
+- Applies out-of-tree patches automatically (logged to `outputs/patch-report.txt`)
+- Failed/skipped patches are reported but do not abort the build
 
 ### Patch Strategy
-The 37 patches add support for:
-- **Duo-S board DTS** (12 patches) - not yet upstream, expected v7.2
-- **Thermal driver** (4 patches) - under review
-- **PWM driver** (4 patches) - under review
-- **Remote-proc C906L** (4 patches) - under review
-- **DMA CV1800B** (3 patches) - partially upstream
-- **Ethernet MDIO mux** (3 patches) - under review
-- **eFuse driver** (3 patches) - under review
-- **I2S/Audio** (2 patches) - under review
-- **Timer, Watchdog, Mailbox** (remaining)
+The RISC-V patches add SG200X SoC/board support (DTS, thermal, PWM,
+remote-proc C906L, DMA, Ethernet MDIO mux, eFuse, I2S/audio, timer/watchdog,
+mailbox). The ARM64 build uses a slimmed config that disables all non-Sophgo
+SoC vendors and unrelated subsystems to keep build time ~24 min.
 
 See [Sophgo Linux Wiki](https://github.com/sophgo/linux/wiki) for upstream status.
 

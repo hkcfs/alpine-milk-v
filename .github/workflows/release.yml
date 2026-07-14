@@ -1,0 +1,126 @@
+name: Monthly image release
+
+# Once a month: build the COMPLETE flashable image (latest stable kernel + latest
+# Alpine) for both arches, boot each one in QEMU to PROVE it works, and publish
+# a release whose notes contain the full boot log + diagnostics (auto-build
+# proof, same idea as nuttx-sg2000 releases).
+on:
+  schedule:
+    - cron: '37 4 1 * *'          # 1st of every month 04:37 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [riscv, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QEMU / sshpass / mtools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-riscv64 qemu-system-arm \
+            sshpass mtools
+
+      - name: Pull prebaked builder image
+        run: docker pull ghcr.io/${{ github.repository }}/builder:latest
+
+      - name: Build image (${{ matrix.arch }})
+        run: |
+          docker run --rm --privileged \
+            -v "${{ github.workspace }}/outputs:/project/images" \
+            -v "${{ github.workspace }}/.kernel-src:/project/kernel/linux" \
+            -v "${{ github.workspace }}/.ccache:/project/.ccache" \
+            ghcr.io/${{ github.repository }}/builder:latest \
+            bash /project/build.sh --arch ${{ matrix.arch }} duo256m
+
+      - name: Capture boot proof
+        run: |
+          IMAGE="outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img"
+          KERNEL="outputs/kernel-${{ matrix.arch }}/Image"
+          sh scripts/capture-boot.sh "${{ matrix.arch }}" "$IMAGE" "$KERNEL" \
+            > "outputs/boot-${{ matrix.arch }}.md"
+
+      - name: Compress image for release
+        run: gzip -kf "outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img"
+
+      - name: Per-arch release notes
+        run: |
+          {
+            echo "# Milk-V Duo 256M (${{ matrix.arch }}) — $(date +'%Y-%m')"
+            echo
+            echo "Flash with:"
+            echo '```'
+            echo "gzip -cd alpine-milkv-duo256m-${{ matrix.arch }}.img.gz | sudo dd of=/dev/sdX bs=4M status=progress"
+            echo '```'
+            echo
+            echo "### Boot proof (auto-captured in QEMU)"
+            echo
+            cat "outputs/boot-${{ matrix.arch }}.md"
+          } > "outputs/notes-${{ matrix.arch }}.md"
+
+      - name: Publish per-arch release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: duo256m-${{ matrix.arch }}-$(date +'%Y-%m')
+          name: Duo 256M ${{ matrix.arch }} $(date +'%Y-%m')
+          body_path: outputs/notes-${{ matrix.arch }}.md
+          prerelease: false
+          files: |
+            outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img.gz
+            outputs/boot-${{ matrix.arch }}.md
+
+      - name: Upload boot log for combined notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-${{ matrix.arch }}
+          path: outputs/boot-${{ matrix.arch }}.md
+
+  release-notes:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: boots
+      - name: Assemble combined release notes
+        run: |
+          {
+            echo "# Milk-V Duo 256M (SG2002) auto-built images — $(date +'%Y-%m')"
+            echo
+            echo "Automatically built from the latest stable Linux kernel and the"
+            echo "latest Alpine Linux. Two images are produced, one per architecture."
+            echo
+            for a in riscv arm64; do
+              echo "## $a"
+              echo
+              echo "Flash with:"
+              echo '```'
+              echo "gzip -cd alpine-milkv-duo256m-${a}.img.gz | sudo dd of=/dev/sdX bs=4M status=progress"
+              echo '```'
+              echo
+              echo "### Boot proof (auto-captured in QEMU)"
+              echo
+              cat "boots/boot-${a}/boot-${a}.md" 2>/dev/null || echo "_boot log missing_"
+              echo
+            done
+            echo "## Combined download"
+            echo
+            echo "RISC-V: \`alpine-milkv-duo256m-riscv.img.gz\`"
+            echo "ARM64:  \`alpine-milkv-duo256m-arm64.img.gz\`"
+          } > NOTES.md
+          cat NOTES.md
+      - name: Publish combined release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: duo256m-$(date +'%Y-%m')
+          name: Duo 256M both arches $(date +'%Y-%m')
+          body_path: NOTES.md
+          prerelease: false

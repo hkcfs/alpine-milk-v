@@ -1,184 +1,104 @@
-# Alpine Linux for Milk-V Duo
+# Alpine Linux for the Milk-V Duo 256M (SG2002)
 
-Minimal, Docker-based build system for creating Alpine Linux images for Milk-V Duo S and Duo 256M RISC-V SBCs.
+Minimal, Docker-based build system that produces flashable **Alpine Linux**
+images for the **Milk-V Duo 256M** (Sophgo SG2002) — both the **RISC-V**
+(C906) and **ARM64** (Cortex-A53) cores. The latest stable Linux kernel and
+the latest Alpine release are pulled in automatically, so the images stay
+current with no manual intervention.
 
 ## Features
 
-- **Alpine Linux Edge** - Minimal, security-oriented Linux distribution
-- **Mainline Kernel** - Latest stable Linux kernel with Milk-V Duo patches
-- **Docker-based** - No host dependencies except Docker
-- **Both Boards** - Support for Duo S (512MB) and Duo 256M
-- **WiFi/Bluetooth** - aic8800 driver support
-- **USB** - Host and device mode (CDC-NCM)
-- **Audio** - I2S with analog output
+- **Alpine Linux** (latest stable, currently 3.24) — minimal and secure
+- **Latest mainline kernel** — `build.sh` fetches the newest stable kernel
+  from kernel.org on every build
+- **Two architectures** — `riscv` (default) and `arm64`, selectable per build
+- **Docker-only** — no host toolchain needed; everything builds inside a
+  container
+- **Automated** — GitHub Actions builds the kernel weekly and the full image
+  monthly, and **boots each image in QEMU to prove it works** before publishing
 
-## Quick Start
-
-### Prerequisites
-
-- Docker and Docker Compose
-- ~10GB free disk space
-- SD card (8GB or larger)
-
-### Build Everything
+## Quick start (local build)
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/alpine-milkv.git
-cd alpine-milkv
+# Build the RISC-V image (default)
+make build-image
 
-# Build everything (kernel + rootfs + image)
-make all
+# Build the ARM64 image
+make build-image ARCH=arm64
 
-# Or build step by step
-make kernel    # Build kernel
-make rootfs    # Build rootfs
-make image     # Create SD card image
+# Or call build.sh directly
+./build.sh duo256m            # riscv
+./build.sh --arch arm64 duo256m
 ```
 
-### Flash to SD Card
+The resulting image is written to `outputs/alpine-milkv-duo256m-<arch>.img`.
+
+### Flash to SD card
 
 ```bash
-# Find your SD card device
-lsblk
-
-# Flash (replace /dev/sdX with your device)
-make flash SD=/dev/sdX
-
-# Or use dd directly
-sudo dd if=images/alpine-milkv-duos.img of=/dev/sdX bs=4M status=progress
+lsblk                                   # find your SD card
+gzip -cd outputs/alpine-milkv-duo256m-riscv.img.gz \
+  | sudo dd of=/dev/sdX bs=4M status=progress
 ```
 
-## Configuration
-
-### Build Options
-
-```bash
-# Build for Duo 256M instead of Duo S
-make BOARD=duo256m all
-
-# Custom hostname
-make HOSTNAME=my-milkv all
-
-# Custom root password
-make PASSWORD=secretpassword all
-
-# Disable CPU overdrive (default: 1000MHz -> 850MHz)
-make OVERDRIVE=n all
-```
-
-### Docker Compose Services
-
-```bash
-# Interactive shell in builder
-docker compose run --rm builder
-
-# Build only kernel
-docker compose run --rm kernel
-
-# Build only rootfs
-docker compose run --rm rootfs
-
-# Flash with device access
-docker compose run --rm --privileged flash
-```
-
-## First Boot
-
-1. Insert SD card into Milk-V Duo
-2. Power on (takes ~2 minutes on first boot)
-3. Connect via USB (CDC-NCM):
-   ```bash
-   ssh root@192.168.42.1
-   ```
-4. Default credentials:
-   - Username: `root`
-   - Password: `milkv`
-
-## Project Structure
+## Project layout
 
 ```
-alpine-milkv/
-├── SOUL.md              # Project documentation
-├── Makefile             # Build orchestration
-├── docker-compose.yml   # Docker services
-├── Dockerfile           # Build environment
-├── scripts/
-│   ├── build-all.sh     # Full build
-│   ├── build-kernel.sh  # Kernel compilation
-│   ├── build-rootfs.sh  # Root filesystem
-│   ├── build-image.sh   # SD card image
-│   ├── flash.sh         # Flash to SD
-│   ├── test-image.sh    # Image testing
-│   └── setup-kernel-config.sh
+.
+├── build.sh                 # Main build script (kernel + rootfs + image)
+├── Makefile                 # Convenience wrappers (make build-image)
+├── docker/
+│   ├── Dockerfile           # Builder image (toolchain, genimage, deps)
+│   ├── docker-compose.yml   # binfmt + builder services
+│   └── .dockerignore
+├── genimage.cfg             # SD card partition layout
 ├── kernel/
-│   └── milkv-duos_defconfig
-├── bootloader/
-│   └── fip.bin          # Vendor bootloader
-├── rootfs/
-│   └── apkovl/          # Alpine overlays
-└── images/              # Output images
+│   ├── milkv-duo256m_defconfig   # RISC-V kernel config
+│   ├── configs/
+│   │   └── arm64-slim.config     # ARM64 config trim (drops unused vendors)
+│   ├── patches/             # RISC-V out-of-tree patches
+│   └── patches-arm64/       # ARM64 board DTS
+├── milkv-bootloader/
+│   ├── duo256m/             # RISC-V fip.bin
+│   └── duo256m-arm64/       # ARM64 (Cortex-A53) fip.bin
+├── scripts/
+│   ├── setup.sh             # Installs build deps inside the container
+│   ├── second-stage.sh      # Rootfs configuration (runs in chroot)
+│   ├── first-boot.sh        # First-boot partition expansion / SSH keygen
+│   └── capture-boot.sh      # Boots an image in QEMU and logs proof for releases
+├── packages/                # Custom out-of-tree packages (kernel modules / userspace)
+│   ├── kernel-modules/
+│   └── userspace/
+├── outputs/                 # Build artifacts (git-ignored)
+└── .github/workflows/       # builder (2-month) / kernel (weekly) / release (monthly)
 ```
 
-## Kernel Configuration
+## Automated builds (GitHub Actions)
 
-```bash
-# Interactive kernel config
-make kernel-config
+| Workflow        | Schedule            | Produces                                         |
+|-----------------|---------------------|--------------------------------------------------|
+| `builder.yml`   | every 2 months      | Prebaked builder image → GHCR (fast CI runs)     |
+| `kernel.yml`    | every Monday        | Latest kernel `Image` + DTBs per arch (release)  |
+| `release.yml`   | 1st of each month   | Full flashable image, **boot-tested in QEMU**, release with boot log |
 
-# Enable specific features
-./scripts/setup-kernel-config.sh --board=duos
-```
+Each monthly release's notes contain a code block with the **entire QEMU boot
+log + SSH diagnostics**, so you can see the auto-built image actually boots
+before you flash it.
 
-## Testing
+## First boot
 
-```bash
-# Test image integrity
-make test
-
-# Verify partitions and boot files
-./scripts/test-image.sh --board=duos
-```
-
-## Troubleshooting
-
-### Board doesn't boot
-
-1. Verify SD card is properly inserted
-2. Check if `fip.bin` exists in boot partition
-3. Try re-flashing the image
-4. Check serial console output
-
-### WiFi not working
-
-```bash
-# Check if firmware is loaded
-ls /lib/firmware/aic8800/
-
-# Load driver manually
-modprobe aic8800
-
-# Check interface
-ip link show
-```
-
-### USB not detected
-
-```bash
-# Check USB mode
-lsusb
-
-# Switch to device mode
-echo device > /sys/kernel/debug/usb/comply/cm_config
-```
+1. Flash the image to an SD card and insert it into the Duo 256M.
+2. Power on (first boot expands the root partition).
+3. Connect over serial (`ttyS0`, 115200n8) or SSH once networking is up.
+4. Default credentials — user `root`, password `milkv`.
 
 ## Credits
 
-- [milkv-duo-ubuntu](https://github.com/queenkjuul/milkv-duo-ubuntu) - Ubuntu port
-- [Alpine Linux](https://alpinelinux.org/) - Base distribution
-- [Milk-V](https://milkv.io/) - Hardware
-- [Sophgo](https://www.sophgo.com/) - SoC vendor
+- [milkv-duo-ubuntu](https://github.com/queenkjuul/milkv-duo-ubuntu) — original Ubuntu port
+- [scpcom/sophgo-sg200x-debian](https://github.com/scpcom/sophgo-sg200x-debian) — SG200x kernel/slim-config reference
+- [lupyuen/nuttx-sg2000](https://github.com/lupyuen/nuttx-sg2000) — automated daily-build + boot-proof release pattern
+- [Alpine Linux](https://alpinelinux.org/), [Milk-V](https://milkv.io/), [Sophgo](https://www.sophgo.com/)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

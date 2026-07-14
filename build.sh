@@ -18,14 +18,14 @@ while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help)
             cat <<EOF
-build.sh - create an Alpine Linux image for Milk-V Duo boards
+build.sh - create an Alpine Linux image for the Milk-V Duo 256M (SG2002)
 
     build.sh [-c | --custom] [-h | --help] [--arch ARCH] [BOARD]
 
     -h | --help     show this help
     -c | --custom   prompt for settings
     --arch ARCH     target architecture: riscv (default) or arm64
-    BOARD           one of duos, duos-wifi, duo256m
+    BOARD           duo256m (only supported board)
 
 default hostname is "$DEFAULT_HNAME" and default root password is "$DEFAULT_PASSWORD"
 default target board is "$DEFAULT_BOARD"
@@ -48,8 +48,8 @@ EOF
 done
 
 if [ "$FLAG" = "--custom" ]; then
-    while [ ! "$BOARD" = "duos" ] && [ ! "$BOARD" = "duos-wifi" ] && [ ! "$BOARD" = "duo256m" ]; do
-        read -rp "target board (required, must be duos or duo256m): " BOARD
+    while [ ! "$BOARD" = "duo256m" ]; do
+        read -rp "target board (required, must be duo256m): " BOARD
     done
     [ -z "$HNAME" ] && read -rp "hostname (optional, default: $DEFAULT_HNAME): " HNAME
     [ -z "$PASSWORD" ] && { read -rsp "root password (optional, default: $DEFAULT_PASSWORD): " PASSWORD; echo; }
@@ -58,6 +58,12 @@ if [ "$FLAG" = "--custom" ]; then
 fi
 
 [ -z "$BOARD" ] && BOARD=$DEFAULT_BOARD
+
+# Only the Milk-V Duo 256M (SG2002) is supported.
+if [ "$BOARD" != "duo256m" ]; then
+    echo "ERROR: unsupported board '$BOARD'. Only 'duo256m' is supported." >&2
+    exit 1
+fi
 [ -z "$HNAME" ] && HNAME=$DEFAULT_HNAME
 [ -z "$PASSWORD" ] && PASSWORD=$DEFAULT_PASSWORD
 
@@ -127,10 +133,7 @@ Selected Configuration:
 ============================================
 EOF
 
-if [ "$BOARD" = "duos-wifi" ]; then
-    WIRELESS="true"
-    BOARD="duos"
-fi
+WIRELESS=""
 
 JOBS=$(nproc)
 
@@ -433,12 +436,11 @@ echo "Setting root password"
 sed -i "s|^root:[^:]*:|root:$PASSWORD_HASH:|" "$ROOTFS_DIR/etc/shadow"
 
 echo "Generating SD Card Image..."
-[ -n "$WIRELESS" ] && BOARD="duos-wifi"
 IMG_NAME="alpine-milkv-$BOARD-$ARCH_TARGET"
 dd if=/dev/zero of="$OUTDIR/swap.img" bs=1M count=256 2>/dev/null
 mkswap "$OUTDIR/swap.img" >/dev/null
-fakeroot genimage --rootpath ./rootfs --config ./genimage.cfg --inputpath "$OUTDIR" --outputpath "$OUTDIR"
-mv "$OUTDIR/alpine-milkv.img" "images/$IMG_NAME.img"
+fakeroot genimage --rootpath "$ROOTFS_DIR" --config ./genimage.cfg --inputpath "$OUTDIR" --outputpath "$OUTDIR"
+mv "$OUTDIR/alpine-milkv.img" "$OUTDIR/$IMG_NAME.img"
 
 echo ""
 echo "============================================"
@@ -447,11 +449,11 @@ echo "============================================"
 echo "Kernel: Linux $LATEST_STABLE"
 echo "Arch:   $ARCH_TARGET ($ALPINE_ARCH)"
 echo "Patches: $APPLIED applied, $SKIPPED skipped"
-echo "Image: images/$IMG_NAME.img"
-echo "Size:  $(ls -lh images/$IMG_NAME.img | awk '{print $5}')"
+echo "Image: $IMG_NAME.img (in outputs/ as alpine-milkv-duo256m-$ARCH_TARGET.img)"
+echo "Size:  $(ls -lh "$OUTDIR/$IMG_NAME.img" | awk '{print $5}')"
 echo ""
-echo "Patch report: images/$ARCH_TARGET/patch-report.txt"
+echo "Patch report: $ARCH_TARGET/patch-report.txt"
 echo ""
 echo "Flash with:"
-echo "  sudo dd if=images/$IMG_NAME.img of=/dev/sdX bs=4M status=progress"
+echo "  sudo dd if=outputs/alpine-milkv-duo256m-$ARCH_TARGET.img of=/dev/sdX bs=4M status=progress"
 echo "============================================"

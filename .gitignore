@@ -1,5 +1,5 @@
 # Build artifacts (per-arch outputs produced by build.sh)
-images/
+outputs/
 rootfs-riscv/
 rootfs-arm64/
 kernel/build/

@@ -1,21 +1,21 @@
-.PHONY: help build shell build-rootfs
+.PHONY: help build shell build-image
 
-BOARD ?= duos
+BOARD ?= duo256m
 
 help:
-	@echo "Alpine Linux for Milk-V Duo"
+	@echo "Alpine Linux for the Milk-V Duo 256M (SG2002)"
 	@echo ""
-	@echo "  make build              - Build Docker image"
-	@echo "  make build-rootfs       - Build Alpine rootfs and image"  
-	@echo "  make shell              - Interactive shell in builder"
+	@echo "  make build           - Build the Docker builder image"
+	@echo "  make shell           - Interactive shell in the builder"
+	@echo "  make build-image     - Build the SD card image (BOARD=duo256m)"
 	@echo ""
-	@echo "  BOARD=duo256m make build-rootfsmake build-rootfs   - Build for Duo 256M"
+	@echo "  BOARD=duo256m make build-image   - Build for the Duo 256M"
 
 build:
-	docker compose build builder
+	cd docker && docker compose build builder
 
 shell: build
-	docker compose run --rm shell
+	cd docker && docker compose run --rm shell
 
-build-rootfs: build
-	docker compose run --rm builder ./build.sh $(BOARD)
+build-image: build
+	cd docker && docker compose run --rm builder ./build.sh $(if $(ARCH),--arch $(ARCH),) $(BOARD)
