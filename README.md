@@ -2,15 +2,17 @@
 
 Minimal, Docker-based build system that produces flashable **Alpine Linux**
 images for the **Milk-V Duo 256M** (Sophgo SG2002) — both the **RISC-V**
-(C906) and **ARM64** (Cortex-A53) cores. The latest stable Linux kernel and
-the latest Alpine release are pulled in automatically, so the images stay
-current with no manual intervention.
+(C906) and **ARM64** (Cortex-A53) cores. The latest Alpine release is pulled
+in automatically, so the images stay current with no manual intervention.
 
 ## Features
 
 - **Alpine Linux** (latest stable, currently 3.24) — minimal and secure
-- **Latest mainline kernel** — `build.sh` fetches the newest stable kernel
+- **RISC-V kernel** — `build.sh` fetches the newest **stable mainline** kernel
   from kernel.org on every build
+- **ARM64 kernel** — uses the proven **vendor kernel from `scpcom/linux`**
+  (`licheervnano-merged-5.10.y`, ≈ v5.10.260), since mainline Linux has no
+  arm64 SG2002 support. This is what actually runs on the Duo 256M's Cortex-A53.
 - **Two architectures** — `riscv` (default) and `arm64`, selectable per build
 - **Docker-only** — no host toolchain needed; everything builds inside a
   container
@@ -53,11 +55,12 @@ gzip -cd outputs/alpine-milkv-duo256m-riscv.img.gz \
 │   └── .dockerignore
 ├── genimage.cfg             # SD card partition layout
 ├── kernel/
-│   ├── milkv-duo256m_defconfig   # RISC-V kernel config
-│   ├── configs/
-│   │   └── arm64-slim.config     # ARM64 config trim (drops unused vendors)
+│   ├── milkv-duo256m_defconfig   # RISC-V kernel config (latest stable mainline)
 │   ├── patches/             # RISC-V out-of-tree patches
-│   └── patches-arm64/       # ARM64 board DTS
+│   └── arm64-sg200x/        # ARM64 vendor kernel assets (scpcom/linux)
+│       ├── defconfig        # Duo 256M ARM64 defconfig
+│       ├── dts/             # Board DTS (cv181x_milkv_duo256m_sd.dts)
+│       └── patches/         # Vendor driver backports (mailbox, reset, ...)
 ├── milkv-bootloader/
 │   ├── duo256m/             # RISC-V fip.bin
 │   └── duo256m-arm64/       # ARM64 (Cortex-A53) fip.bin

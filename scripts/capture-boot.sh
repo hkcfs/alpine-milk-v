@@ -37,8 +37,20 @@ if [ -n "$KERNEL" ] && [ -f "$KERNEL" ]; then
     cp "$KERNEL" "$KERNEL_OUT"
 else
     # Extract the kernel from the image's boot partition (vfat, partition 1).
-    mcopy -i "$IMG"@@1M ::/Image "$KERNEL_OUT" 2>/dev/null \
-        || { echo "could not extract kernel from $IMG" >&2; exit 1; }
+    # genimage places the first partition at sector 1 (512 bytes), so detect
+    # the real offset instead of assuming 1MiB.
+    BOOT_START=$(partx -o START -n 1 - "$IMG" 2>/dev/null | tail -1 | tr -d ' ')
+    BOOT_OFF=$(( ${BOOT_START:-1} * 512 ))
+    if mcopy -i "$IMG"@@"$BOOT_OFF" ::/Image "$KERNEL_OUT" 2>/dev/null; then
+        :
+    elif mcopy -i "$IMG"@@512 ::/Image "$KERNEL_OUT" 2>/dev/null; then
+        :
+    elif mcopy -i "$IMG"@@1M ::/Image "$KERNEL_OUT" 2>/dev/null; then
+        :
+    else
+        echo "could not extract kernel from $IMG" >&2
+        exit 1
+    fi
 fi
 
 LOGBASE="$WORK/boot"

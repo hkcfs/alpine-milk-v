@@ -75,10 +75,12 @@ alpine-milk-v/
 │   ├── setup.sh               # Build container dependencies (+ ccache)
 │   └── capture-boot.sh        # QEMU boot proof for releases
 ├── kernel/
-│   ├── milkv-duo256m_defconfig # RISC-V kernel config
-│   ├── configs/arm64-slim.config # ARM64 config trim
+│   ├── milkv-duo256m_defconfig # RISC-V kernel config (latest stable mainline)
 │   ├── patches/               # RISC-V out-of-tree patches for CV18XX/SG200X
-│   └── patches-arm64/         # ARM64 board DTS
+│   └── arm64-sg200x/          # ARM64 vendor kernel assets (scpcom/linux)
+│       ├── defconfig          # Duo 256M ARM64 defconfig
+│       ├── dts/               # Board DTS (cv181x_milkv_duo256m_sd.dts)
+│       └── patches/           # Vendor driver backports (mailbox, reset, ...)
 ├── milkv-bootloader/
 │   ├── duo256m/               # RISC-V fip.bin
 │   └── duo256m-arm64/         # ARM64 (Cortex-A53) fip.bin
@@ -96,12 +98,21 @@ alpine-milk-v/
 - Failed/skipped patches are reported but do not abort the build
 
 ### Patch Strategy
-The RISC-V patches add SG200X SoC/board support (DTS, thermal, PWM,
+The RISC-V build uses the **latest stable mainline kernel** (kernel.org) with
+out-of-tree patches that add SG200X SoC/board support (DTS, thermal, PWM,
 remote-proc C906L, DMA, Ethernet MDIO mux, eFuse, I2S/audio, timer/watchdog,
-mailbox). The ARM64 build uses a slimmed config that disables all non-Sophgo
-SoC vendors and unrelated subsystems to keep build time ~24 min.
+mailbox).
 
-See [Sophgo Linux Wiki](https://github.com/sophgo/linux/wiki) for upstream status.
+The **ARM64** build targets the real Duo 256M Cortex-A53 core and uses the
+**vendor kernel from `scpcom/linux`** (branch `licheervnano-merged-5.10.y`,
+pinned at `f5fb0eb` ≈ v5.10.260). Mainline Linux has no arm64 SG2002 support,
+so the proven sophgo-sg200x-debian vendor tree is used. Its defconfig, board
+DTS and driver backports live under `kernel/arm64-sg200x/`. On a persistent
+source volume the correct tree is (re)cloned automatically when the arch
+switches, and `git reset --hard HEAD` restores a pristine tree before patching.
+
+See [sophgo-sg200x-debian](https://github.com/scpcom/sophgo-sg200x-debian) and
+[Sophgo Linux Wiki](https://github.com/sophgo/linux/wiki) for upstream status.
 
 ## CRITICAL: Docker Build Rules
 

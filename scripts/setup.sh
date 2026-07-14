@@ -14,7 +14,8 @@ BUILD_DEPS=(qemu-user-static binfmt-support dpkg-cross \
   libtool wget curl git gcc libssl-dev bc squashfs-tools android-sdk-libsparse-utils \
   jq python3-setuptools scons parallel tree python3-dev python3-pip device-tree-compiler ssh \
   cpio fakeroot flex bison libncurses5-dev genext2fs rsync unzip dosfstools mtools \
-  tcl openssh-client cmake expect libconfuse2 libarchive-tools ccache)
+  tcl openssh-client cmake expect libconfuse2 libarchive-tools ccache \
+  sshpass qemu-system)
 MISSING_DEPS=()
 
 dpkg --add-architecture riscv64
