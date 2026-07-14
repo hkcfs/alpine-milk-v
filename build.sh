@@ -351,7 +351,7 @@ make -j"$JOBS" $KMAKE_CC Image modules </dev/null > "$KBUILD_LOG" 2>&1 || {
 # boot partition; QEMU 'virt' supplies its own DTB for the boot test. The DTB
 # make target is the path relative to arch/<arch>/boot/dts/ (e.g. sophgo/...).
 BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
-if [ "$ARCH_TARGET" = "riscv" ] && ! make -j"$JOBS" $KMAKE_CC "$BOARD_DTB" </dev/null >> "$KBUILD_LOG" 2>&1; then
+if ! make -j"$JOBS" $KMAKE_CC "$BOARD_DTB" </dev/null >> "$KBUILD_LOG" 2>&1; then
     echo "  WARNING: board DTB build reported errors."
     echo "  WARNING: board DTB build had errors" >> "$PATCH_LOG"
 fi

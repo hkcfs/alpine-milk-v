@@ -1,9 +1,9 @@
 name: Monthly image release
 
 # Once a month: build the COMPLETE flashable image (latest stable kernel + latest
-# Alpine) for both arches, boot each one in QEMU to PROVE it works, and publish
-# a release whose notes contain the full boot log + diagnostics (auto-build
-# proof, same idea as nuttx-sg2000 releases).
+# Alpine) for the Milk-V Duo 256M (riscv / SG2002), boot it in QEMU to PROVE it
+# works, and publish a release whose notes contain the full boot log + diagnostics
+# (auto-build proof, same idea as nuttx-sg2000 releases).
 on:
   schedule:
     - cron: '37 4 1 * *'          # 1st of every month 04:37 UTC
@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [riscv, arm64]
+        arch: [riscv]
     steps:
       - uses: actions/checkout@v4
 
@@ -101,9 +101,9 @@ jobs:
             echo "# Milk-V Duo 256M (SG2002) auto-built images — $(date +'%Y-%m')"
             echo
             echo "Automatically built from the latest stable Linux kernel and the"
-            echo "latest Alpine Linux. Two images are produced, one per architecture."
+            echo "latest Alpine Linux for the Milk-V Duo 256M (riscv / SG2002)."
             echo
-            for a in riscv arm64; do
+            for a in riscv; do
               echo "## $a"
               echo
               echo "Flash with:"
@@ -119,13 +119,12 @@ jobs:
             echo "## Combined download"
             echo
             echo "RISC-V: \`alpine-milkv-duo256m-riscv.img.gz\`"
-            echo "ARM64:  \`alpine-milkv-duo256m-arm64.img.gz\`"
           } > NOTES.md
           cat NOTES.md
       - name: Publish combined release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: duo256m-$(date +'%Y-%m')
-          name: Duo 256M both arches $(date +'%Y-%m')
+          name: Duo 256M $(date +'%Y-%m')
           body_path: NOTES.md
           prerelease: false

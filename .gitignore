@@ -6,6 +6,12 @@ kernel/build/
 kernel/linux/
 .cache/
 
+# Stray kernel/bootloader artifacts that can leak to the repo root if a build
+# is ever run from the working directory instead of inside the builder container
+/Image
+/fip.bin
+/sophgo/
+
 # Docker
 .docker/
 
