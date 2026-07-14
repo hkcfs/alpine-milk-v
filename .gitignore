@@ -48,3 +48,6 @@ Thumbs.db
 *.mod.c
 *.order
 *.symvers
+
+# ccache (local build cache)
+.ccache/

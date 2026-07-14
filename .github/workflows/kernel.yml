@@ -68,17 +68,20 @@ jobs:
             -v "${{ github.workspace }}/.kernel-src-${{ matrix.arch }}:/project/kernel/linux" \
             -v "${{ github.workspace }}/.ccache:/project/.ccache" \
             ghcr.io/${{ github.repository }}/builder-${{ matrix.arch }}:latest \
-            bash /project/build.sh --arch ${{ matrix.arch }} duo256m
+            bash /project/build.sh --arch ${{ matrix.arch }} --kernel-only duo256m
 
       - name: Package kernel artifacts
         run: |
           cd outputs
-          mkdir -p pkg
+          mkdir -p pkg/modules
           cp kernel-${{ matrix.arch }}/Image pkg/ 2>/dev/null || true
           mkdir -p pkg/dtb/sophgo
           cp kernel-${{ matrix.arch }}/dtb/sophgo/*.dtb pkg/dtb/sophgo/ 2>/dev/null || true
           cp ${{ matrix.arch }}/patch-report.txt pkg/ 2>/dev/null || true
           cp ${{ matrix.arch }}/kernel-build.log pkg/ 2>/dev/null || true
+          # Self-contained update bundle users can apply to a running board.
+          cp kernel-${{ matrix.arch }}/alpine-milkv-kernel-${{ matrix.arch }}.tar.gz pkg/ 2>/dev/null || true
+          cp -r kernel-${{ matrix.arch }}/modules/lib/modules pkg/modules/ 2>/dev/null || true
           zip -r ../kernel-${{ matrix.arch }}.zip pkg/
         working-directory: ${{ github.workspace }}
 
@@ -101,4 +104,6 @@ jobs:
           tag_name: kernel-${{ matrix.arch }}-${{ steps.date.outputs.date }}
           name: Kernel ${{ matrix.arch }} ${{ steps.date.outputs.date }}
           prerelease: false
-          files: kernel-${{ matrix.arch }}.zip
+          files: |
+            kernel-${{ matrix.arch }}.zip
+            outputs/kernel-${{ matrix.arch }}/alpine-milkv-kernel-${{ matrix.arch }}.tar.gz

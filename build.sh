@@ -2,6 +2,13 @@
 set -e
 set -o pipefail
 
+# Avoid "dubious ownership" errors when the kernel source is a bind-mounted
+# volume owned by a different UID than the container user (e.g. a local
+# `docker run` where the host dir was created by a non-root user). CI creates
+# the volume as root so this is a no-op there.
+git config --global --add safe.directory /project/kernel/linux 2>/dev/null || true
+git config --global --add safe.directory /project 2>/dev/null || true
+
 DEFAULT_BOARD=duo256m
 DEFAULT_HNAME=milkv-alpine
 DEFAULT_PASSWORD=milkv
@@ -13,6 +20,7 @@ OVERDRIVE=.od
 ARCH_TARGET=""
 FLAG=""
 BOARD=""
+KERNEL_ONLY=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -20,12 +28,14 @@ while [ $# -gt 0 ]; do
             cat <<EOF
 build.sh - create an Alpine Linux image for the Milk-V Duo 256M (SG2002)
 
-    build.sh [-c | --custom] [-h | --help] [--arch ARCH] [BOARD]
+    build.sh [-c | --custom] [-h | --help] [--kernel-only] [--arch ARCH] [BOARD]
 
-    -h | --help     show this help
-    -c | --custom   prompt for settings
-    --arch ARCH     target architecture: riscv (default) or arm64
-    BOARD           duo256m (only supported board)
+    -h | --help       show this help
+    -c | --custom     prompt for settings
+    --kernel-only     build only the kernel (Image + DTBs + modules): a compile
+                      smoke-test that also produces an update bundle; no rootfs/image
+    --arch ARCH       target architecture: riscv (default) or arm64
+    BOARD             duo256m (only supported board)
 
 default hostname is "$DEFAULT_HNAME" and default root password is "$DEFAULT_PASSWORD"
 default target board is "$DEFAULT_BOARD"
@@ -35,6 +45,10 @@ EOF
         --arch)
             ARCH_TARGET="$2"
             shift 2
+            ;;
+        --kernel-only)
+            KERNEL_ONLY=1
+            shift
             ;;
         -c|--custom)
             FLAG="--custom"
@@ -436,6 +450,61 @@ fi
 
 echo "Kernel built: $(ls -lh "$KERNEL_OUT/Image" | awk '{print $5}')"
 cd /project
+
+# ============================================
+# Kernel-only mode: stop after the kernel build. Used by the weekly kernel.yml
+# CI job as a compile smoke-test, and to produce a self-contained update bundle
+# users can apply on top of an existing image.
+# ============================================
+if [ -n "$KERNEL_ONLY" ]; then
+    echo ""
+    echo "=== Kernel-only build: installing modules + packaging update ==="
+    cd "$KERNEL_DIR"
+    KVER=$(make -s kernelrelease 2>/dev/null | tail -1)
+    MOD_DIR="$KERNEL_OUT/modules"
+    rm -rf "$MOD_DIR"
+    mkdir -p "$MOD_DIR"
+    # DEPMOD=true: skip the host depmod (wrong arch); the user runs depmod -a on
+    # the board after extracting the bundle.
+    make $KMAKE_CC INSTALL_MOD_PATH="$MOD_DIR" DEPMOD=true modules_install </dev/null >> "$KBUILD_LOG" 2>&1 || {
+        echo "!!! Kernel modules_install FAILED. Last 20 lines:"
+        tail -20 "$KBUILD_LOG"
+        exit 1
+    }
+    cd /project
+
+    # Update bundle that extracts at / on a running device:
+    #   boot/Image             -> /boot/Image            (vfat boot partition)
+    #   boot/dtb/sophgo/*.dtb  -> /boot/dtb/sophgo/      (vfat boot partition)
+    #   lib/modules/<kver>/    -> /lib/modules/<kver>/
+    BUNDLE="$KERNEL_OUT/alpine-milkv-kernel-${ARCH_TARGET}.tar.gz"
+    rm -f "$BUNDLE"
+    STAGE=$(mktemp -d)
+    mkdir -p "$STAGE/boot/dtb" "$STAGE/lib"
+    cp "$KERNEL_OUT/Image" "$STAGE/boot/Image"
+    cp -r "$KERNEL_OUT/dtb/sophgo" "$STAGE/boot/dtb/sophgo" 2>/dev/null || true
+    cp -r "$MOD_DIR/lib/modules" "$STAGE/lib/modules"
+    tar -C "$STAGE" -czf "$BUNDLE" boot lib
+    rm -rf "$STAGE"
+
+    echo ""
+    echo "============================================"
+    echo " KERNEL-ONLY BUILD COMPLETE (compile smoke-test)"
+    echo "============================================"
+    echo "Kernel: $KERNEL_DISPLAY"
+    echo "Arch:   $ARCH_TARGET ($ALPINE_ARCH)"
+    echo "Patches: $APPLIED applied, $SKIPPED skipped"
+    echo "Image:  $KERNEL_OUT/Image"
+    echo "DTBs:   $KERNEL_OUT/dtb/sophgo/"
+    echo "Modules: $MOD_DIR/lib/modules/$KVER"
+    echo "Update bundle: $BUNDLE"
+    echo ""
+    echo "Apply on a running board (as root):"
+    echo "  tar -xzf $BUNDLE -C /"
+    echo "  depmod -a"
+    echo "  reboot"
+    exit 0
+fi
 
 # ============================================
 # STEP 2: Build $ROOTFS_DIR
