@@ -78,6 +78,33 @@ else
     echo "Architecture: riscv64"
 fi
 
+# ccache: cache compiled objects so kernel version bumps only recompile the
+# files that actually changed. We wrap ONLY the compiler via CC=... (never
+# CROSS_COMPILE, which is also used for ld/objcopy/etc that ccache can't wrap).
+# CCACHE_DIR lives outside the kernel source tree so it survives the source
+# wipe that happens on a kernel version change.
+KMAKE_CC=""
+if command -v ccache >/dev/null 2>&1; then
+    export CCACHE_DIR="${CCACHE_DIR:-/project/.ccache}"
+    export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-5G}"
+    export CCACHE_COMPILERCHECK=content
+    mkdir -p "$CCACHE_DIR"
+    ccache -M "$CCACHE_MAXSIZE" >/dev/null 2>&1 || true
+    # The CC/HOSTCC values must be single tokens (no spaces) so they survive
+    # unquoted word-splitting on the make command line. Use tiny wrapper scripts
+    # that exec "ccache <compiler>".
+    CCACHE_BIN_DIR=/tmp/ccache-wrappers
+    mkdir -p "$CCACHE_BIN_DIR"
+    printf '#!/bin/sh\nexec ccache %sgcc "$@"\n' "$CROSS_COMPILE" > "$CCACHE_BIN_DIR/target-cc"
+    printf '#!/bin/sh\nexec ccache gcc "$@"\n' > "$CCACHE_BIN_DIR/host-cc"
+    chmod +x "$CCACHE_BIN_DIR/target-cc" "$CCACHE_BIN_DIR/host-cc"
+    KMAKE_CC="CC=$CCACHE_BIN_DIR/target-cc HOSTCC=$CCACHE_BIN_DIR/host-cc"
+    echo "ccache enabled: dir=$CCACHE_DIR max=$CCACHE_MAXSIZE"
+    ccache -z >/dev/null 2>&1 || true
+else
+    echo "ccache not found - full compile (install 'ccache' for faster rebuilds)"
+fi
+
 if [ "$PASSWORD" = "$DEFAULT_PASSWORD" ]; then
     DISPLAY_PASSWORD="Default ($DEFAULT_PASSWORD)"
 else
@@ -167,6 +194,16 @@ fi
 cd "$KERNEL_DIR"
 echo "Kernel version: $(make kernelrelease 2>/dev/null || echo 'unknown')"
 
+# Per-architecture output directories so a parallel matrix build (riscv + arm64)
+# never clobbers each other's kernel / DTB / image. (Previously both arches
+# wrote to images/kernel/Image, so the last build won the shared path.)
+KERNEL_OUT="/project/images/kernel-${ARCH_TARGET}"
+OUTDIR="/project/images/${ARCH_TARGET}"
+ROOTFS_DIR="/project/rootfs-${ARCH_TARGET}"
+mkdir -p "$KERNEL_OUT" "$OUTDIR"
+PATCH_LOG="/project/images/${ARCH_TARGET}/patch-report.txt"
+KBUILD_LOG="/project/images/${ARCH_TARGET}/kernel-build.log"
+
 # Patches must ONLY be applied on a pristine tree. Re-applying on an already
 # patched tree corrupts source files. Use a stamp keyed to version/board/arch
 # so an existing prepared tree is reused for a fast incremental rebuild.
@@ -188,9 +225,8 @@ echo ""
 echo "=== Applying patches ==="
 APPLIED=0
 FAILED=0
-SKIPPED=0
-PATCH_LOG="/project/images/patch-report.txt"
-mkdir -p /project/images
+ SKIPPED=0
+ mkdir -p /project/images
 echo "Patch report for Linux $LATEST_STABLE" > "$PATCH_LOG"
 echo "Generated: $(date -u)" >> "$PATCH_LOG"
 echo "=================================" >> "$PATCH_LOG"
@@ -236,8 +272,29 @@ echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
 echo ""
 echo "Configuring kernel..."
 if [ "$ARCH_TARGET" = "arm64" ]; then
-    # For arm64, use the upstream defconfig which already has Sophgo support
+    # For arm64, start from the upstream defconfig (has Sophgo support) then
+    # slim it down: the stock defconfig builds EVERY arm64 SoC vendor's drivers
+    # and DTBs (thousands of files). We keep only the Sophgo family and drop the
+    # heavy subsystems a headless SBC never uses. This is the single biggest
+    # kernel compile-time win. (Inspired by scpcom/sophgo-sg200x, which builds
+    # only one SoC family.)
     make "$KERNEL_DEFCONFIG" 2>/dev/null
+    echo "Slimming arm64 config (keep Sophgo, drop other SoC vendors)..."
+    if [ -f arch/arm64/Kconfig.platforms ]; then
+        for sym in $(grep -oP '^config \K[A-Z0-9_]+' arch/arm64/Kconfig.platforms); do
+            case "$sym" in
+                ARCH_SOPHGO) ./scripts/config -e "$sym" ;;
+                ARCH_*)      ./scripts/config -d "$sym" ;;
+            esac
+        done
+    fi
+    SLIM_FRAG=/project/kernel/configs/arm64-slim.config
+    if [ -f "$SLIM_FRAG" ]; then
+        echo "Applying slim fragment: $SLIM_FRAG"
+        ./scripts/kconfig/merge_config.sh -m .config "$SLIM_FRAG" >/dev/null 2>&1 \
+            || cat "$SLIM_FRAG" >> .config
+    fi
+    make olddefconfig 2>/dev/null
 else
     cp /project/kernel/"$KERNEL_DEFCONFIG" .config
     make olddefconfig 2>/dev/null
@@ -260,10 +317,8 @@ echo "$WANT_PREPARE" > "$PREPARE_STAMP"
 fi  # end SKIP_PREPARE guard
 
 echo "Building kernel with $JOBS jobs..."
-mkdir -p /project/images
-KBUILD_LOG=/project/images/kernel-build.log
 # Build the kernel Image and modules first (these are required).
-make -j"$JOBS" Image modules > "$KBUILD_LOG" 2>&1 || {
+make -j"$JOBS" $KMAKE_CC Image modules > "$KBUILD_LOG" 2>&1 || {
     echo "!!! Kernel Image/modules build FAILED. Last 40 lines:"
     tail -40 "$KBUILD_LOG"
     exit 1
@@ -271,80 +326,84 @@ make -j"$JOBS" Image modules > "$KBUILD_LOG" 2>&1 || {
 # Build device trees. A single out-of-tree board DTS that doesn't apply cleanly
 # against the latest vanilla kernel must NOT abort the whole build: QEMU 'virt'
 # supplies its own DTB, so a boot test still works. Failures are logged.
-if ! make -j"$JOBS" dtbs >> "$KBUILD_LOG" 2>&1; then
+if ! make -j"$JOBS" $KMAKE_CC dtbs >> "$KBUILD_LOG" 2>&1; then
     echo "  WARNING: 'make dtbs' reported errors (some board DTBs may be missing)."
     echo "  WARNING: dtbs build had errors" >> "$PATCH_LOG"
 fi
 tail -5 "$KBUILD_LOG"
 
+if command -v ccache >/dev/null 2>&1; then
+    echo "--- ccache stats ---"
+    ccache -s 2>/dev/null | grep -iE 'hit|miss|cache size' || true
+fi
+
 echo "Copying kernel artifacts..."
-rm -rf /project/images/kernel/dtb
-mkdir -p /project/images/kernel
-mkdir -p /project/images/kernel/dtb/sophgo
+rm -rf "$KERNEL_OUT/dtb"
+mkdir -p "$KERNEL_OUT/dtb/sophgo"
 # Only copy the Sophgo board DTBs (not every vendor's DTBs - that overflows
 # the 128M boot partition with 1700+ unrelated device trees).
 if [ "$ARCH_TARGET" = "arm64" ]; then
-    cp arch/arm64/boot/Image /project/images/kernel/
-    find arch/arm64/boot/dts/sophgo -name "*.dtb" -exec cp {} /project/images/kernel/dtb/sophgo/ \; 2>/dev/null || true
+    cp arch/arm64/boot/Image "$KERNEL_OUT/"
+    find arch/arm64/boot/dts/sophgo -name "*.dtb" -exec cp {} "$KERNEL_OUT/dtb/sophgo/" \; 2>/dev/null || true
 else
-    cp arch/riscv/boot/Image /project/images/kernel/
-    find arch/riscv/boot/dts/sophgo -name "*.dtb" -exec cp {} /project/images/kernel/dtb/sophgo/ \; 2>/dev/null || true
+    cp arch/riscv/boot/Image "$KERNEL_OUT/"
+    find arch/riscv/boot/dts/sophgo -name "*.dtb" -exec cp {} "$KERNEL_OUT/dtb/sophgo/" \; 2>/dev/null || true
 fi
 
-echo "Kernel built: $(ls -lh /project/images/kernel/Image | awk '{print $5}')"
+echo "Kernel built: $(ls -lh "$KERNEL_OUT/Image" | awk '{print $5}')"
 cd /project
 
 # ============================================
-# STEP 2: Build rootfs
+# STEP 2: Build $ROOTFS_DIR
 # ============================================
 echo ""
-echo "=== Step 2: Building Alpine rootfs ==="
+echo "=== Step 2: Building Alpine $ROOTFS_DIR ==="
 
 echo "Downloading Alpine minirootfs for $ALPINE_ARCH..."
-rm -rf rootfs
-mkdir -p rootfs
+rm -rf $ROOTFS_DIR
+mkdir -p $ROOTFS_DIR
 mkdir -p images
 
 wget -q -O /tmp/alpine-minirootfs.tar.gz \
     "$ALPINE_MIRROR/$ALPINE_VERSION/releases/$ALPINE_ARCH/alpine-minirootfs-$ALPINE_RELEASE-$ALPINE_ARCH.tar.gz"
 
-echo "Extracting rootfs..."
-tar -xzf /tmp/alpine-minirootfs.tar.gz -C rootfs
+echo "Extracting $ROOTFS_DIR..."
+tar -xzf /tmp/alpine-minirootfs.tar.gz -C $ROOTFS_DIR
 rm /tmp/alpine-minirootfs.tar.gz
 
-# Copy kernel into rootfs boot
-mkdir -p rootfs/boot
-cp images/kernel/Image rootfs/boot/
-cp -r images/kernel/dtb rootfs/boot/ 2>/dev/null || true
+# Copy kernel into $ROOTFS_DIR boot
+mkdir -p $ROOTFS_DIR/boot
+cp "$KERNEL_OUT/Image" $ROOTFS_DIR/boot/
+cp -r "$KERNEL_OUT/dtb" $ROOTFS_DIR/boot/ 2>/dev/null || true
 
 echo "Running second-stage setup..."
-cp scripts/second-stage.sh rootfs/
-cp scripts/first-boot.sh rootfs/
+cp scripts/second-stage.sh $ROOTFS_DIR/
+cp scripts/first-boot.sh $ROOTFS_DIR/
 
 # Mount proc/sys/dev for chroot
-mount -t proc proc rootfs/proc 2>/dev/null || true
-mount -t sysfs sysfs rootfs/sys 2>/dev/null || true
-mount -o bind /dev rootfs/dev 2>/dev/null || true
-mount -o bind /dev/pts rootfs/dev/pts 2>/dev/null || true
+mount -t proc proc $ROOTFS_DIR/proc 2>/dev/null || true
+mount -t sysfs sysfs $ROOTFS_DIR/sys 2>/dev/null || true
+mount -o bind /dev $ROOTFS_DIR/dev 2>/dev/null || true
+mount -o bind /dev/pts $ROOTFS_DIR/dev/pts 2>/dev/null || true
 
 # Copy QEMU static into chroot for cross-arch emulation
 QEMU_STATIC_PATH=$(which "$QEMU_BIN" 2>/dev/null || echo "")
 if [ -n "$QEMU_STATIC_PATH" ]; then
-    cp "$QEMU_STATIC_PATH" rootfs/usr/bin/ 2>/dev/null || true
+    cp "$QEMU_STATIC_PATH" $ROOTFS_DIR/usr/bin/ 2>/dev/null || true
 fi
 
 # Configure DNS for chroot
-echo "nameserver 8.8.8.8" > rootfs/etc/resolv.conf
-echo "nameserver 8.8.4.4" >> rootfs/etc/resolv.conf
+echo "nameserver 8.8.8.8" > $ROOTFS_DIR/etc/resolv.conf
+echo "nameserver 8.8.4.4" >> $ROOTFS_DIR/etc/resolv.conf
 
-chroot rootfs /bin/sh -e /second-stage.sh "$BOARD" "$HNAME" "$PASSWORD" "$WIRELESS"
+chroot $ROOTFS_DIR /bin/sh -e /second-stage.sh "$BOARD" "$HNAME" "$PASSWORD" "$WIRELESS"
 
 # Unmount BEFORE genimage runs
 cleanup() {
-    umount rootfs/dev/pts 2>/dev/null || true
-    umount rootfs/dev 2>/dev/null || true
-    umount rootfs/sys 2>/dev/null || true
-    umount rootfs/proc 2>/dev/null || true
+    umount $ROOTFS_DIR/dev/pts 2>/dev/null || true
+    umount $ROOTFS_DIR/dev 2>/dev/null || true
+    umount $ROOTFS_DIR/sys 2>/dev/null || true
+    umount $ROOTFS_DIR/proc 2>/dev/null || true
 }
 cleanup
 
@@ -360,26 +419,26 @@ if [ "$ARCH_TARGET" = "arm64" ]; then
 else
     BOOTLOADER_DIR="milkv-bootloader/$BOARD"
 fi
-cp $BOOTLOADER_DIR/fip.bin$OVERDRIVE images/fip.bin 2>/dev/null || \
-    cp $BOOTLOADER_DIR/fip.bin images/fip.bin
+cp $BOOTLOADER_DIR/fip.bin$OVERDRIVE "$OUTDIR/fip.bin" 2>/dev/null || \
+    cp $BOOTLOADER_DIR/fip.bin "$OUTDIR/fip.bin"
 echo "OK."
 
 # Copy kernel to boot partition for genimage
-rm -rf images/boot
-mkdir -p images/boot
-cp images/kernel/Image images/boot/
-cp -r images/kernel/dtb images/boot/ 2>/dev/null || true
+rm -rf "$OUTDIR/boot"
+mkdir -p "$OUTDIR/boot"
+cp "$KERNEL_OUT/Image" "$OUTDIR/boot/"
+cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
 
 echo "Setting root password"
-sed -i "s|^root:[^:]*:|root:$PASSWORD_HASH:|" ./rootfs/etc/shadow
+sed -i "s|^root:[^:]*:|root:$PASSWORD_HASH:|" "$ROOTFS_DIR/etc/shadow"
 
 echo "Generating SD Card Image..."
 [ -n "$WIRELESS" ] && BOARD="duos-wifi"
 IMG_NAME="alpine-milkv-$BOARD-$ARCH_TARGET"
-dd if=/dev/zero of=images/swap.img bs=1M count=256 2>/dev/null
-mkswap images/swap.img >/dev/null
-fakeroot genimage --rootpath ./rootfs --config ./genimage.cfg --inputpath ./images
-mv images/alpine-milkv.img images/$IMG_NAME.img
+dd if=/dev/zero of="$OUTDIR/swap.img" bs=1M count=256 2>/dev/null
+mkswap "$OUTDIR/swap.img" >/dev/null
+fakeroot genimage --rootpath ./rootfs --config ./genimage.cfg --inputpath "$OUTDIR" --outputpath "$OUTDIR"
+mv "$OUTDIR/alpine-milkv.img" "images/$IMG_NAME.img"
 
 echo ""
 echo "============================================"
@@ -391,7 +450,7 @@ echo "Patches: $APPLIED applied, $SKIPPED skipped"
 echo "Image: images/$IMG_NAME.img"
 echo "Size:  $(ls -lh images/$IMG_NAME.img | awk '{print $5}')"
 echo ""
-echo "Patch report: images/patch-report.txt"
+echo "Patch report: images/$ARCH_TARGET/patch-report.txt"
 echo ""
 echo "Flash with:"
 echo "  sudo dd if=images/$IMG_NAME.img of=/dev/sdX bs=4M status=progress"

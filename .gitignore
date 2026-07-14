@@ -1,6 +1,7 @@
-# Build artifacts
+# Build artifacts (per-arch outputs produced by build.sh)
 images/
-rootfs/rootfs/
+rootfs-riscv/
+rootfs-arm64/
 kernel/build/
 kernel/linux/
 .cache/

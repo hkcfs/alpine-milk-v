@@ -16,6 +16,7 @@ services:
     volumes:
       - ./images:/project/images
       - kernel-src:/project/kernel/linux
+      - ccache:/project/.ccache
     working_dir: /project
 
   shell:
@@ -26,3 +27,4 @@ services:
 
 volumes:
   kernel-src:
+  ccache:
