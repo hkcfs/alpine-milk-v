@@ -113,6 +113,9 @@ jobs:
             echo "### Build + boot proof (auto-captured)"
             echo
             cat "outputs/boot-${{ matrix.arch }}.md"
+            echo
+            echo "The complete build log (kernel compile, Alpine setup, QEMU boot proof)"
+            echo "is attached to this release as \`build.log\`."
           } > "outputs/notes-${{ matrix.arch }}.md"
 
       - name: Set release date
@@ -128,12 +131,19 @@ jobs:
           prerelease: false
           files: |
             outputs/${{ matrix.arch }}/alpine-milkv-duo256m-${{ matrix.arch }}.img.gz
+            outputs/${{ matrix.arch }}/build.log
 
       - name: Upload boot log for combined notes
         uses: actions/upload-artifact@v4
         with:
           name: boot-${{ matrix.arch }}
           path: outputs/boot-${{ matrix.arch }}.md
+
+      - name: Upload full build log for combined notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.arch }}
+          path: outputs/${{ matrix.arch }}/build.log
 
   release-notes:
     needs: image
@@ -144,6 +154,15 @@ jobs:
         with:
           pattern: boot-*
           path: boots
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: builds
+      - name: Prepare build logs for combined release
+        run: |
+          mkdir -p release-assets
+          cp builds/build-riscv/build.log release-assets/build-riscv.log
+          cp builds/build-arm64/build.log release-assets/build-arm64.log
       - name: Assemble combined release notes
         run: |
           {
@@ -171,9 +190,14 @@ jobs:
             done
             echo "## Combined download"
             echo
-            echo "RISC-V (primary): \`alpine-milkv-duo256m-riscv.img.gz\`"
-            echo "ARM64 (experimental, vendor kernel for real A53 core): \`alpine-milkv-duo256m-arm64.img.gz\`"
-          } > NOTES.md
+             echo "RISC-V (primary): \`alpine-milkv-duo256m-riscv.img.gz\`"
+             echo "ARM64 (experimental, vendor kernel for real A53 core): \`alpine-milkv-duo256m-arm64.img.gz\`"
+             echo
+             echo "## Full build logs"
+             echo
+             echo "Complete build logs (kernel compile, Alpine setup, QEMU boot proof) are"
+             echo "attached to this release as \`build-riscv.log\` and \`build-arm64.log\`."
+           } > NOTES.md
           cat NOTES.md
       - name: Set release date
         id: date
@@ -186,3 +210,6 @@ jobs:
           name: Duo 256M ${{ steps.date.outputs.date }}
           body_path: NOTES.md
           prerelease: false
+          files: |
+            release-assets/build-riscv.log
+            release-assets/build-arm64.log
