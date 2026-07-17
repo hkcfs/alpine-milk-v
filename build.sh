@@ -202,7 +202,7 @@ else
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE"
     DTS_SRC=""
-    BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
+    BOARD_DTB="sophgo/sg2002-milkv-duo256m.dtb"
 fi
 
 # Download/clone kernel source into the persistent source volume.
@@ -422,7 +422,7 @@ make -j"$JOBS" $KMAKE_CC Image modules </dev/null > "$KBUILD_LOG" 2>&1 || {
 # sibling DTS against newer kernels). The board DTB is what ships in the image's
 # boot partition; QEMU 'virt' supplies its own DTB for the boot test. The DTB
 # make target is the path relative to arch/<arch>/boot/dts/ (e.g. sophgo/...).
-# BOARD_DTB is set per-arch above (riscv: sg2002-milkv-duo-256m.dtb,
+# BOARD_DTB is set per-arch above (riscv: sg2002-milkv-duo256m.dtb,
 # arm64:    cv181x_milkv_duo256m_sd.dtb).
 if ! make -j"$JOBS" $KMAKE_CC "$BOARD_DTB" </dev/null >> "$KBUILD_LOG" 2>&1; then
     echo "  WARNING: board DTB build reported errors (target: $BOARD_DTB)."
@@ -591,7 +591,11 @@ cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
 # the rootfs is /dev/mmcblk0p2 (boot=1, rootfs=2 after the swap reorder).
 if command -v mkimage >/dev/null 2>&1; then
     BOARD_DTB_FILE="$KERNEL_OUT/dtb/sophgo/$(basename "$BOARD_DTB")"
-    [ -f "$BOARD_DTB_FILE" ] || BOARD_DTB_FILE=$(find "$KERNEL_OUT/dtb" -name '*.dtb' | head -1)
+    if [ ! -f "$BOARD_DTB_FILE" ]; then
+        echo "ERROR: board DTB not built: $BOARD_DTB_FILE (BOARD_DTB=$BOARD_DTB)"
+        echo "Available DTBs:"; find "$KERNEL_OUT/dtb" -name '*.dtb' | head
+        exit 1
+    fi
     if [ -f "$BOARD_DTB_FILE" ] && [ -f "$KERNEL_OUT/Image" ]; then
         # The Milk-V Duo 256M debug serial is ttyS0 for the RISC-V core and
         # ttyAMA0 for the ARM core; rootfs lives on mmcblk0p2.
@@ -602,11 +606,21 @@ if command -v mkimage >/dev/null 2>&1; then
         BOOT_CONSOLE="ttyS0"
         [ "$ARCH_TARGET" = "arm64" ] && BOOT_CONSOLE="ttyAMA0"
         BOOTARGS="console=${BOOT_CONSOLE},115200 earlycon mem=256M cma=32M root=/dev/mmcblk0p2 rootwait rw"
+        # The vendor U-Boot (in fip.bin) selects the FIT config by an exact name.
+        # From the official Duo 256M SDK image these are:
+        #   riscv: config-sg2002_milkv_duo256m_musl_riscv64_sd
+        #   arm64: config-sg2002_milkv_duo256m_glibc_arm64_sd
+        if [ "$ARCH_TARGET" = "arm64" ]; then
+            FIT_CONFIG="config-sg2002_milkv_duo256m_glibc_arm64_sd"
+        else
+            FIT_CONFIG="config-sg2002_milkv_duo256m_musl_riscv64_sd"
+        fi
         sed -e "s|__IMAGE__|$KERNEL_OUT/Image|g" \
             -e "s|__DTB__|$BOARD_DTB_FILE|g" \
             -e "s|__ARCH__|$ARCH_TARGET|g" \
             -e "s|__KERNEL_LOAD__|0x80200000|g" \
             -e "s|__FDT_LOAD__|0x82200000|g" \
+            -e "s|__CONFIG_NAME__|$FIT_CONFIG|g" \
             -e "s|__BOOTARGS__|bootargs = \"${BOOTARGS}\";|g" \
             -e "s|__BOOTARGS_CFG__|bootargs = \"${BOOTARGS}\";|g" \
             /project/multi.its.in > "$OUTDIR/multi.its"

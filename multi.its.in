@@ -47,8 +47,8 @@
     };
 
     configurations {
-        default = "config-cv181x_milkv_duo256m_sd";
-        config-cv181x_milkv_duo256m_sd {
+        default = "__CONFIG_NAME__";
+        __CONFIG_NAME__ {
             description = "Milk-V Duo 256M";
             kernel = "kernel";
             fdt = "fdt";
