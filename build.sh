@@ -582,6 +582,39 @@ mkdir -p "$OUTDIR/boot"
 cp "$KERNEL_OUT/Image" "$OUTDIR/boot/"
 cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
 
+# Build the FIT image (boot.sd) the board's vendor U-Boot expects:
+#   fatload mmc 0 ${uImage_addr} boot.sd && bootm ${uImage_addr}#config-...
+# It must be a FIT (mkimage), not a raw Image. Load addresses come from the
+# vendor U-Boot env (uImage_addr=0x82000000): kernel 0x80200000, fdt 0x82200000.
+#
+# bootargs: real Duo 256M UART is ttyS0 (riscv) / ttyAMA0 (arm64) @ 115200, and
+# the rootfs is /dev/mmcblk0p2 (boot=1, rootfs=2 after the swap reorder).
+if command -v mkimage >/dev/null 2>&1; then
+    BOARD_DTB_FILE="$KERNEL_OUT/dtb/sophgo/$(basename "$BOARD_DTB")"
+    [ -f "$BOARD_DTB_FILE" ] || BOARD_DTB_FILE=$(find "$KERNEL_OUT/dtb" -name '*.dtb' | head -1)
+    if [ -f "$BOARD_DTB_FILE" ] && [ -f "$KERNEL_OUT/Image" ]; then
+        # The Milk-V Duo 256M debug serial is ttyS0 for the RISC-V core and
+        # ttyAMA0 for the ARM core; rootfs lives on mmcblk0p2.
+        BOOT_CONSOLE="ttyS0"
+        [ "$ARCH_TARGET" = "arm64" ] && BOOT_CONSOLE="ttyAMA0"
+        BOOTARGS="console=${BOOT_CONSOLE},115200 earlycon root=/dev/mmcblk0p2 rootwait rw"
+        sed -e "s|__IMAGE__|$KERNEL_OUT/Image|g" \
+            -e "s|__DTB__|$BOARD_DTB_FILE|g" \
+            -e "s|__ARCH__|$ARCH_TARGET|g" \
+            -e "s|__KERNEL_LOAD__|0x80200000|g" \
+            -e "s|__FDT_LOAD__|0x82200000|g" \
+            -e "s|__BOOTARGS__|bootargs = \"${BOOTARGS}\";|g" \
+            -e "s|__BOOTARGS_CFG__|bootargs = \"${BOOTARGS}\";|g" \
+            /project/multi.its.in > "$OUTDIR/multi.its"
+        mkimage -f "$OUTDIR/multi.its" "$OUTDIR/boot.sd" >/dev/null 2>&1 && \
+            echo "FIT boot.sd built OK." || echo "WARNING: mkimage boot.sd failed"
+    else
+        echo "WARNING: missing Image/DTB, cannot build boot.sd"
+    fi
+else
+    echo "WARNING: mkimage not found, cannot build boot.sd FIT image"
+fi
+
 echo "Setting root password"
 sed -i "s|^root:[^:]*:|root:$PASSWORD_HASH:|" "$ROOTFS_DIR/etc/shadow"
 

@@ -135,8 +135,8 @@ mkdir -p /usr/libexec/milkv
 cat > /usr/libexec/milkv/first-boot.sh <<'BOOTEOF'
 #!/bin/sh
 echo "First Boot: Expanding root partition..."
-parted -s -a opt /dev/mmcblk0 "resizepart 3 100%"
-resize2fs /dev/mmcblk0p3 2>/dev/null || true
+parted -s -a opt /dev/mmcblk0 "resizepart 2 100%"
+resize2fs /dev/mmcblk0p2 2>/dev/null || true
 
 echo "First Boot: Generating SSH keys..."
 ssh-keygen -A

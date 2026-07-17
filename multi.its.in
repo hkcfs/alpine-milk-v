@@ -1,0 +1,58 @@
+/*
+ * Flat Image Tree (FIT) for the Milk-V Duo 256M (SG2002).
+ *
+ * The board's vendor U-Boot (in fip.bin) boots via:
+ *     fatload mmc 0 ${uImage_addr} boot.sd
+ *     bootm ${uImage_addr}#config-cv181x_milkv_duo256m_sd
+ * so boot.sd MUST be a FIT image (built with mkimage -f multi.its), not a
+ * raw Image. Build script fills in the real DTB / load addresses.
+ *
+ * Load addresses (from the vendor U-Boot environment, uImage_addr=0x82000000):
+ *   kernel: 0x80200000   (0x82000000 - <kernel size>, grows down)
+ *   fdt:    0x82200000   (after kernel reservation)
+ */
+/dts-v1/;
+
+/ {
+    description = "Alpine Milk-V Duo 256M FIT";
+    #address-cells = <2>;
+
+    images {
+        kernel {
+            description = "Linux kernel";
+            data = /incbin/("__IMAGE__");
+            type = "kernel";
+            arch = "__ARCH__";
+            os = "linux";
+            compression = "none";
+            load = <__KERNEL_LOAD__>;
+            entry = <__KERNEL_LOAD__>;
+            __BOOTARGS__
+            hash {
+                algo = "sha256";
+            };
+        };
+
+        fdt {
+            description = "Milk-V Duo 256M device tree";
+            data = /incbin/("__DTB__");
+            type = "flat_dt";
+            arch = "__ARCH__";
+            compression = "none";
+            load = <__FDT_LOAD__>;
+            hash {
+                algo = "sha256";
+            };
+        };
+    };
+
+    configurations {
+        default = "config-cv181x_milkv_duo256m_sd";
+        config-cv181x_milkv_duo256m_sd {
+            description = "Milk-V Duo 256M";
+            kernel = "kernel";
+            fdt = "fdt";
+            __BOOTARGS_CFG__
+        };
+    };
+};
