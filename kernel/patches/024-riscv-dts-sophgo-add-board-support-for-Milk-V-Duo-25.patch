@@ -1,8 +1,8 @@
-diff --git a/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts
+diff --git a/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo256m.dts b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo256m.dts
 new file mode 100644
 index 000000000000..3d06cfac6a10
 --- /dev/null
-+++ b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts
++++ b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo256m.dts
 @@ -0,0 +1,150 @@
 +// SPDX-License-Identifier: (GPL-2.0 OR MIT)
 +
