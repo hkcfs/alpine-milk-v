@@ -229,6 +229,9 @@ if [ "$NEED_SOURCE" = "1" ]; then
     if [ "$KERNEL_MODE" = "scpcom" ]; then
         echo "Cloning $KERNEL_REPO ($KERNEL_BRANCH @ $KERNEL_REF) ..."
         git clone --depth 1 -b "$KERNEL_BRANCH" "$KERNEL_REPO" "$KERNEL_DIR"
+        # The shallow clone only has the branch tip; fetch the pinned commit
+        # explicitly so `git checkout $KERNEL_REF` works.
+        git -C "$KERNEL_DIR" fetch --depth 1 origin "$KERNEL_REF"
         git -C "$KERNEL_DIR" checkout -q "$KERNEL_REF"
         git -C "$KERNEL_DIR" reset --hard "$KERNEL_REF" >/dev/null 2>&1 || true
     else
