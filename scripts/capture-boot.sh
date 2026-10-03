@@ -18,13 +18,13 @@ if [ "$ARCH" = "riscv" ]; then
     QEMU=$(command -v qemu-system-riscv64)
     MACHINE="virt"
     CPU=""
-    APPEND="console=ttyS0 root=/dev/vda3 rootwait rw"
+    APPEND="console=ttyS0 root=/dev/vda2 rootwait rw"
     PORT=2222
 elif [ "$ARCH" = "arm64" ]; then
     QEMU=$(command -v qemu-system-aarch64)
     MACHINE="virt"
     CPU="-cpu cortex-a53"
-    APPEND="console=ttyAMA0 root=/dev/vda3 rootwait rw"
+    APPEND="console=ttyAMA0 root=/dev/vda2 rootwait rw"
     PORT=2223
 else
     echo "unknown arch: $ARCH" >&2
