@@ -52,6 +52,8 @@
 
 #include "ion.h"
 
+MODULE_IMPORT_NS("DMA_BUF");	/* dma_buf_* helpers (modpost namespace) */
+
 #define CVI_TPU_CDEV_NAME "cvi-tpu"
 #define CVI_TPU_CLASS_NAME "cvi-tpu"
 
@@ -967,7 +969,10 @@ static int cvi_tpu_cache_flush(struct cvi_tpu_device *ndev, unsigned long arg)
 		dev_err(ndev->dev, "copy c user fail\n");
 		return ret;
 	}
-#if (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
+#if (KERNEL_VERSION(7, 2, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
+	dma_sync_single_for_device(ndev->dev, (dma_addr_t)flush_arg.paddr,
+				   flush_arg.size, DMA_TO_DEVICE);
+#elif (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
 	arch_sync_dma_for_device(flush_arg.paddr, flush_arg.size, DMA_TO_DEVICE);
 #else
 	__dma_map_area(phys_to_virt(flush_arg.paddr), flush_arg.size, DMA_TO_DEVICE);
@@ -988,7 +993,10 @@ static int cvi_tpu_cache_invalidate(struct cvi_tpu_device *ndev,
 		dev_err(ndev->dev, "copy from user fail\n");
 		return ret;
 	}
-#if (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
+#if (KERNEL_VERSION(7, 2, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
+	dma_sync_single_for_device(ndev->dev, (dma_addr_t)invalidate_arg.paddr,
+				   invalidate_arg.size, DMA_FROM_DEVICE);
+#elif (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE) && defined(__riscv)
 	arch_sync_dma_for_device(invalidate_arg.paddr, invalidate_arg.size, DMA_FROM_DEVICE);
 #else
 	__dma_map_area(phys_to_virt(invalidate_arg.paddr), invalidate_arg.size, DMA_FROM_DEVICE);
@@ -1117,7 +1125,12 @@ int cvi_tpu_register_cdev(struct cvi_tpu_device *ndev)
 {
 	int ret;
 
-	npu_class = class_create(THIS_MODULE, CVI_TPU_CLASS_NAME);
+	npu_class =
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+		class_create(CVI_TPU_CLASS_NAME);
+#else
+		class_create(THIS_MODULE, CVI_TPU_CLASS_NAME);
+#endif
 	if (IS_ERR(npu_class)) {
 		pr_err("create class failed\n");
 		return PTR_ERR(npu_class);
@@ -1247,7 +1260,7 @@ static int cvi_tpu_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cvi_tpu_remove(struct platform_device *pdev)
+static void cvi_tpu_remove(struct platform_device *pdev)
 {
 	struct cvi_tpu_device *ndev = platform_get_drvdata(pdev);
 	struct cvi_kernel_work *kernel_work = &ndev->kernel_work;
@@ -1275,7 +1288,6 @@ static int cvi_tpu_remove(struct platform_device *pdev)
 
 	//remove tpu proc
 	proc_remove(tpu_proc_dir);
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP

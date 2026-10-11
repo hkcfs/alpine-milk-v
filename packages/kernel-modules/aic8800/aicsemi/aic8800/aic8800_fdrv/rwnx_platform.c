@@ -727,7 +727,7 @@ static int parse_key_val(const char *str, const char *key, char *val)
 		p--;
 
 	p++;
-	strncpy(val, dst, p -dst);
+	strscpy(val, dst, p -dst);
 	val[p - dst] = 0;
 	return 0;
 }

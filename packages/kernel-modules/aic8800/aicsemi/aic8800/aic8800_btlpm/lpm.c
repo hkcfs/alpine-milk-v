@@ -32,7 +32,6 @@
 #include <linux/bitops.h>
 #include <linux/termios.h>
 #include <linux/gpio.h>
-#include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
 #include <linux/pm_wakeirq.h>

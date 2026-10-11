@@ -1,10 +1,22 @@
 source: milkv-duo/duo-buildroot-sdk-v2 osdrv/interdrv/{tpu,include}
   (vendor 5.10-era TPU kernel driver + interdrv headers, cv180x/cv181x HALs)
 packaged: 2026-10-11; SG2002 uses the cv181x HAL (CVIARCH=CV181X)
-port shims (ours, documented here — no silent vendor edits except the ion stub):
+verified: builds clean on 7.2.10 (riscv64 gcc 10.3) -> cv181x_tpu.ko
+7.2 port shims/fixes (documented here):
   - wrapper Makefile (this dir): selects cv181x HAL, -D__CV181X__,
-    -DPDE_DATA=pde_data (PDE_DATA removed in 5.17), -I paths
-  - src/tpu/common/ion.h: empty stub; stale include, zero ION API usage verified
+    -DPDE_DATA=pde_data (PDE_DATA removed in 5.17), absolute -I/-include
+    via PKGDIR ($(src) is "." under M= builds — relative paths silently miss)
+  - src/tpu/common/tpu_compat.h (-include, no vendor edits): timer.h,
+    vmalloc.h, module.h + from_timer/del_timer_sync/del_timer defines
+    (7.2 timer rename series; gated >= 7.2)
+  - src/tpu/common/ion.h: full vendor struct ion_buffer (CONFIG_ION_CVITEK
+    layout, byte-identical) — replaces empty stub; runtime still needs an
+    ION-compatible exporter
+  - src/compat-include/linux/streamline_annotate.h: empty stub (ARM-only
+    header; all use under #if 0, verified by grep)
+  - cvi_tpu_interface.c: class_create 1-arg (gated >= 6.4); remove() void;
+    cache ops use dma_sync_single_for_device on 7.2+riscv (arch_sync_dma_*
+    unexported); MODULE_IMPORT_NS("DMA_BUF") (quoted form)
 license: vendor SDK terms apply; TPU firmware + cviruntime userspace NOT
   included (see spec 06 OPEN: firmware redistribution)
 risks: 5.10-era code on 7.2 — further API drift possible; build.sh hook is

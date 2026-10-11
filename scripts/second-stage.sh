@@ -64,7 +64,8 @@ if [ -d /packages ]; then
 
     echo "Installing custom kernel modules..."
     KVER=$(uname -r 2>/dev/null || true)
-    for ko in /packages/kernel-modules/*.ko; do
+    # Recursive: out-of-tree builds leave .ko files in their source subdirs.
+    for ko in $(find /packages/kernel-modules -name '*.ko' 2>/dev/null); do
         [ -e "$ko" ] || continue
         if [ -n "$KVER" ] && [ -d "/lib/modules/$KVER" ]; then
             mkdir -p "/lib/modules/$KVER/extra"

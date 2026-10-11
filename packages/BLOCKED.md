@@ -27,11 +27,15 @@ added. Each entry: what was tried, what exists, what's missing.
   a buildable form.
 - Verdict: remoteproc path is the supported route; bare-8051 deferred.
 
-## TPU — PACKAGED, compile-unverified (NOT blocked, NOT proven)
+## TPU — PACKAGED + COMPILE-PROVEN (HW-unverified, NOT blocked)
 
 - Packaged: `packages/kernel-modules/tpu/` (vendor driver + interdrv
-  headers + wrapper Makefile + PDE_DATA/ion shims), firmware via
-  `packages/firmware-manifest`, warn-only build hook in build.sh.
-- cviruntime userspace SDK + TPU firmware blobs NOT included (redistribution
-  unverified — spec 06 OPEN stands).
-- Proves at: the phase-07 image build (hook compiles it or warns visibly).
+  headers + wrapper Makefile + shims, all documented in SOURCE).
+- Proven 2026-10-11 on 7.2.10: `cv181x_tpu.ko` builds clean (fixed along
+  the way: PKGDIR absolute paths, timer rename shims, class_create,
+  void remove, dma_sync_single_for_device, DMA_BUF namespace, vendored
+  ION layout, streamline stub).
+- cviruntime userspace SDK + TPU firmware blobs NOT included
+  (redistribution unverified — spec 06 OPEN stands).
+- Runtime needs an ION-compatible exporter + firmware; proves in the HW
+  session via HW-EVIDENCE TPU section.
