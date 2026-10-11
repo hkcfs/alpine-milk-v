@@ -35,3 +35,16 @@ boot. Build them against the kernel source that `build.sh` checks out
 - Both subdirs are optional - an empty dir is a no-op.
 - The mechanism is wired into the build (`build.sh` copies `packages/` into the
   rootfs; `scripts/second-stage.sh` installs from it). No extra step required.
+
+## Adding a driver (phases 02-06 checklist)
+
+1. Source under `packages/kernel-modules/<driver>/` with origin URL + version
+   pinned in a `SOURCE` file (no mystery drops).
+2. Firmware blobs (if any) under `packages/firmware/<driver>/` with the
+   license noted in the `SOURCE` file; installed to `/lib/firmware/...`.
+3. DTS hookup: node in the board DTS patch, or a fragment in
+   `kernel/overlays/` (see that dir's README).
+4. Kconfig: default `m` (module, off-by-default safe) unless probe order
+   demands built-in — justify in the commit message.
+5. Evidence: extend `scripts/hw-probe.sh` + `HW-EVIDENCE.md` for the new
+   peripheral in the same commit.

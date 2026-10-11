@@ -454,6 +454,40 @@ fi
 echo "Kernel built: $(ls -lh "$KERNEL_OUT/Image" | awk '{print $5}')"
 cd /project
 
+# Build out-of-tree module sources: packages/kernel-modules/<name>/ with a
+# Makefile (or a BUILD_DIR file pointing at the real build subdir) gets built
+# against this kernel; resulting .ko files land beside the kernel for the
+# rootfs stage. Warn-only: a failing vendor module must never break the
+# whole image.
+if [ -d /project/packages/kernel-modules ]; then
+    for moddir in /project/packages/kernel-modules/*/; do
+        [ -d "$moddir" ] || continue
+        buildsubdir=""
+        [ -f "$moddir/BUILD_DIR" ] && buildsubdir=$(head -1 "$moddir/BUILD_DIR" | tr -d ' \n')
+        [ -n "$buildsubdir" ] && MDIR="$moddir$buildsubdir" || MDIR="$moddir"
+        [ -f "$MDIR/Makefile" ] || continue
+        echo "Building out-of-tree modules: $(basename "$moddir")..."
+        make -C "$KERNEL_DIR" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" M="$MDIR" modules </dev/null >> "$KBUILD_LOG" 2>&1 \
+            && echo "  modules OK: $(basename "$moddir")" \
+            || echo "  WARNING: module build failed: $(basename "$moddir") (see kernel-build.log)"
+    done
+fi
+
+# Fetch firmware blobs listed in packages/firmware-manifest ("<url> <dest>").
+# Warn-only; missing firmware degrades the peripheral, never the build.
+if [ -f /project/packages/firmware-manifest ]; then
+    mkdir -p /project/packages/firmware
+    while IFS= read -r line _rest; do
+        case "$line" in ''|\#*) continue;; esac
+        url=${line%% *}; dest=${line#* }
+        [ -f "/project/packages/firmware/$dest" ] && continue
+        mkdir -p "/project/packages/firmware/$(dirname "$dest")"
+        wget -q --tries=2 --timeout=60 -O "/project/packages/firmware/$dest" "$url" 2>/dev/null \
+            && echo "  firmware: $dest" \
+            || echo "  WARNING: firmware fetch failed: $dest"
+    done < /project/packages/firmware-manifest
+fi
+
 # ============================================
 # Kernel-only mode: stop after the kernel build. Used by the weekly kernel.yml
 # CI job as a compile smoke-test, and to produce a self-contained update bundle
@@ -534,6 +568,7 @@ cp -r "$KERNEL_OUT/dtb" $ROOTFS_DIR/boot/ 2>/dev/null || true
 
 echo "Running second-stage setup..."
 cp scripts/second-stage.sh $ROOTFS_DIR/
+cp scripts/hw-probe.sh scripts/apply-overlays.sh $ROOTFS_DIR/ 2>/dev/null || true
 cp -r packages $ROOTFS_DIR/packages 2>/dev/null || true
 
 # Mount proc/sys/dev for chroot
@@ -584,6 +619,17 @@ rm -rf "$OUTDIR/boot"
 mkdir -p "$OUTDIR/boot"
 cp "$KERNEL_OUT/Image" "$OUTDIR/boot/"
 cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
+
+# Compile DT overlays (kernel/overlays/*.dts -> boot/overlays/*.dtbo).
+if [ -d /project/kernel/overlays ]; then
+    mkdir -p "$OUTDIR/boot/overlays"
+    for ov in /project/kernel/overlays/*.dts; do
+        [ -e "$ov" ] || continue
+        dtc -@ -I dts -O dtb -o "$OUTDIR/boot/overlays/$(basename "$ov" .dts).dtbo" "$ov" 2>/dev/null \
+            && echo "Overlay built: $(basename "$ov" .dts).dtbo" \
+            || echo "WARNING: overlay failed to compile: $ov"
+    done
+fi
 
 # Build the FIT image (boot.sd) the board's vendor U-Boot expects:
 #   fatload mmc 0 ${uImage_addr} boot.sd && bootm ${uImage_addr}#config-...

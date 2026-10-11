@@ -1,0 +1,11 @@
+source: milkv-duo/duo-buildroot-sdk-v2 osdrv/interdrv/{tpu,include}
+  (vendor 5.10-era TPU kernel driver + interdrv headers, cv180x/cv181x HALs)
+packaged: 2026-10-11; SG2002 uses the cv181x HAL (CVIARCH=CV181X)
+port shims (ours, documented here — no silent vendor edits except the ion stub):
+  - wrapper Makefile (this dir): selects cv181x HAL, -D__CV181X__,
+    -DPDE_DATA=pde_data (PDE_DATA removed in 5.17), -I paths
+  - src/tpu/common/ion.h: empty stub; stale include, zero ION API usage verified
+license: vendor SDK terms apply; TPU firmware + cviruntime userspace NOT
+  included (see spec 06 OPEN: firmware redistribution)
+risks: 5.10-era code on 7.2 — further API drift possible; build.sh hook is
+  warn-only so a failure degrades to missing-TPU, never a broken image

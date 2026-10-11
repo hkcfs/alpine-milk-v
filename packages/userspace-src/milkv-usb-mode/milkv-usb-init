@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+# milkv-usb-init - apply persisted USB mode at boot.
+description="Apply persisted Milk-V USB mode"
+depend() { need localmount; after modules; }
+
+start() {
+    MODE="$(cat /etc/milkv-usb-mode 2>/dev/null || echo ncm)"
+    ebegin "Applying USB mode: $MODE"
+    /usr/local/bin/milkv-usb-mode "$MODE" >/dev/null 2>&1
+    # Bring up the gadget net interface when in ncm mode.
+    [ "$MODE" = "ncm" ] && { ip link set usb0 up 2>/dev/null; ip addr add 192.168.42.1/24 dev usb0 2>/dev/null; }
+    eend 0
+}

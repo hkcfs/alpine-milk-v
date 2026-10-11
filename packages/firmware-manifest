@@ -1,0 +1,11 @@
+# Firmware fetch manifest: "<url> <dest-rel-to-packages/firmware/>".
+# Fetched at image build time (warn-only); firmware license unknown, see
+# packages/kernel-modules/aic8800/SOURCE. aic8800 blobs from
+# milkv-duo/duo-buildroot-sdk-v2 (vendor SDK).
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/aic_userconfig_8800d80.txt aic8800/aic_userconfig_8800d80.txt
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fmacfw_8800d80_u02.bin aic8800/fmacfw_8800d80_u02.bin
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fmacfwbt_8800d80_u02.bin aic8800/fmacfwbt_8800d80_u02.bin
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_adid_8800d80_u02.bin aic8800/fw_adid_8800d80_u02.bin
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_patch_8800d80_u02.bin aic8800/fw_patch_8800d80_u02.bin
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_patch_table_8800d80_u02.bin aic8800/fw_patch_table_8800d80_u02.bin
+https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/lmacfw_rf_8800d80_u02.bin aic8800/lmacfw_rf_8800d80_u02.bin

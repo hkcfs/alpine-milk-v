@@ -75,7 +75,45 @@ if [ -d /packages ]; then
             cp "$ko" /lib/modules/extra/
         fi
     done
+
+    echo "Installing packaged firmware..."
+    if [ -d /packages/firmware ]; then
+        mkdir -p /lib/firmware
+        cp -r /packages/firmware/* /lib/firmware/ 2>/dev/null || true
+    fi
 fi
+
+# Helper scripts shipped as source (packages/userspace-src/<tool>/<files>).
+if [ -d /packages/userspace-src ]; then
+    echo "Installing userspace helper scripts..."
+    mkdir -p /usr/local/bin
+    for tool in /packages/userspace-src/*/; do
+        [ -d "$tool" ] || continue
+        for f in "$tool"*; do
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in
+                *-init) : ;;  # openrc service, handled below
+                *) cp "$f" /usr/local/bin/; chmod +x "/usr/local/bin/$(basename "$f")" ;;
+            esac
+        done
+        svc=$(ls "$tool"*-init 2>/dev/null | head -1)
+        if [ -n "$svc" ]; then
+            cp "$svc" /etc/init.d/ 2>/dev/null || true
+            chmod +x "/etc/init.d/$(basename "$svc")" 2>/dev/null || true
+            rc-update add "$(basename "$svc")" default 2>/dev/null || true
+        fi
+    done
+    [ -f /etc/milkv-usb-mode ] || echo ncm > /etc/milkv-usb-mode
+fi
+
+# Evidence + overlay helpers (phases 01-06).
+mkdir -p /usr/local/bin
+for helper in hw-probe.sh apply-overlays.sh; do
+    if [ -f "/$helper" ]; then
+        cp "/$helper" /usr/local/bin/
+        chmod +x "/usr/local/bin/$helper"
+    fi
+done
 
 echo "Configuring system..."
 
@@ -183,6 +221,7 @@ echo "UTC" > /etc/timezone
 
 # Clean up
 rm -f /second-stage.sh /first-boot.sh
+rm -rf /packages   # sources/blobs already installed above; keep the image lean
 apk cache clean 2>/dev/null || true
 rm -rf /tmp/*
 

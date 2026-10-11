@@ -1,0 +1,27 @@
+#!/bin/sh
+# milkv-wifi-setup - fix aic8800 MAC and join a network.
+# Usage: milkv-wifi-setup <ssid> [psk]
+# Safe no-op if the aic8800 driver/firmware is absent.
+set -u
+SSID="${1:-}"; PSK="${2:-}"
+[ -n "$SSID" ] || { echo "usage: $0 <ssid> [psk]"; exit 1; }
+modprobe aic8800_fdrv 2>/dev/null || modprobe aic8800 2>/dev/null || {
+    echo "aic8800 driver not loaded (module/firmware missing?)"; exit 1; }
+IFACE="$(iw dev 2>/dev/null | awk '/Interface/ {print $2}' | head -1)"
+[ -n "$IFACE" ] || { echo "no wireless interface found"; exit 1; }
+# Random-but-stable MAC derived from the SoC serial when available.
+SER="$(cat /sys/bus/nvmem/devices/*/nvmem 2>/dev/null | head -c6 | od -An -tx1 2>/dev/null | tr -d ' \n' || true)"
+if [ -n "$SER" ]; then
+    B1=$(printf '%s' "$SER" | cut -c1-2); B2=$(printf '%s' "$SER" | cut -c3-4); B3=$(printf '%s' "$SER" | cut -c5-6)
+    ip link set "$IFACE" down 2>/dev/null
+    ip link set "$IFACE" address "02:08:80:$B1:$B2:$B3" 2>/dev/null || true
+    ip link set "$IFACE" up 2>/dev/null
+fi
+if [ -n "$PSK" ]; then
+    wpa_passphrase "$SSID" "$PSK" > /etc/wpa_supplicant.conf
+    wpa_supplicant -B -i "$IFACE" -c /etc/wpa_supplicant.conf
+else
+    iw dev "$IFACE" connect "$SSID"
+fi
+udhcpc -i "$IFACE" -b 2>/dev/null || dhcpcd "$IFACE" 2>/dev/null || true
+echo "wifi setup attempted on $IFACE"

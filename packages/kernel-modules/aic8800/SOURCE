@@ -1,0 +1,5 @@
+source: https://github.com/queenkjuul/aic8800-milkv-duos @ ccf8fd059f70
+origin: extracted from milkv-duo/duo-buildroot-sdk-v2, cleaned for Linux 7.0
+license: see LICENSE in this dir (driver); firmware NOT included (license unknown)
+kernel: version-gated at 7.0/6.19 by upstream; verify on newer stable at build time
+build: BUILD_DIR subdir via build.sh out-of-tree hook (CONFIG_PLATFORM_CVITEK=y preset)

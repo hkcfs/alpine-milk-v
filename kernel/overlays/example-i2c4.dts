@@ -1,0 +1,10 @@
+/dts-v1/;
+/plugin/;
+
+/* Example overlay: enable I2C4 on pins B20/B21 (duo-pinmux equivalent).
+ * Copy to kernel/overlays/<name>.dts and list the built .dtbo in
+ * /etc/overlays.conf to apply at boot. */
+
+&i2c4 {
+	status = "okay";
+};
