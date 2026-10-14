@@ -109,7 +109,7 @@ fi
 
 # Evidence + overlay helpers (phases 01-06).
 mkdir -p /usr/local/bin
-for helper in hw-probe.sh apply-overlays.sh; do
+for helper in hw-probe.sh hw-selftest.sh apply-overlays.sh; do
     if [ -f "/$helper" ]; then
         cp "/$helper" /usr/local/bin/
         chmod +x "/usr/local/bin/$helper"
@@ -179,6 +179,9 @@ resize2fs /dev/mmcblk0p2 2>/dev/null || true
 
 echo "First Boot: Generating SSH keys..."
 ssh-keygen -A
+
+echo "First Boot: Running hardware self-test..."
+/usr/local/bin/hw-selftest.sh || echo "First Boot: self-test reported failures (see /var/log/hw-selftest.log)"
 
 echo "First Boot: Done"
 rc-update del milkv-first-boot default 2>/dev/null || true

@@ -15,7 +15,10 @@ with the dmesg lines attached.
 
 - [ ] USB host mode: `lsusb` lists a plugged device.
 - [ ] USB gadget (NCM): interface appears on the host PC.
-- [ ] WiFi: `wlan0` appears, scans see networks.
+- [ ] WiFi: `milkv-load-wifi` then `wlan0` appears, scans see networks.
+      NOTE: `aic8800_fdrv` panics the kernel without hardware — expected to
+      be fine ON THE BOARD. If it panics here, capture the whole trace;
+      that panic text is the evidence. Do not retry in a loop.
 - [ ] Bluetooth: `bluetoothctl` lists a controller.
 - [ ] Sound: `/proc/asound/cards` non-empty.
 - [ ] DT overlay in `/boot/overlays` applies (see overlays README).

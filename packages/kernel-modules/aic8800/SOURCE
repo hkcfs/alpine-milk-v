@@ -4,7 +4,15 @@ license: see LICENSE in this dir (driver); firmware NOT included (license unknow
 kernel: version-gated at 7.0/6.19 by upstream; verify on newer stable at build time
 build: BUILD_DIR subdir via build.sh out-of-tree hook (CONFIG_PLATFORM_CVITEK=y preset)
 verified: builds clean on 7.2.10 (riscv64 gcc 10.3) -> aic8800_fdrv.ko,
-  aic8800_bsp.ko, aic8800_btlpm.ko; QEMU boot unaffected (modules load on HW)
+  aic8800_bsp.ko, aic8800_btlpm.ko
+RUNTIME HAZARD (found 2026-10-11, QEMU): aic8800_bsp.ko loads fine, but
+  aic8800_fdrv.ko PANICS the kernel during insmod when the WiFi chip and its
+  DT node are absent: "Oops - load access fault [#1]" inside module_init
+  (rwnx_mod_init -> aicbsp_set_subsys / aicsmac_driver_register, which
+  dereference a bad pointer when no hardware is present). Likely
+  QEMU-specific (no chip, no DT node) - UNVERIFIED on real HW.
+  => Never auto-load fdrv. Only packages/userspace-src/.../milkv-load-wifi
+     loads it, with a loud warning, by hand, on the board only.
 7.2 port fixes (ours, minimal, in-tree):
   - dropped stale #include <linux/of_gpio.h> x3 (header removed 6.x; only
     legacy gpio_* used, still present)

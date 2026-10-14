@@ -22,8 +22,9 @@ echo "--- nvmem/efuse ---"; ls /sys/bus/nvmem/devices/ 2>/dev/null || echo "no n
 echo "--- remoteproc ---"; ls /sys/class/remoteproc/ 2>/dev/null || echo "no remoteproc"; echo
 echo "--- mailbox ---"; dmesg | grep -i "mbox\|mailbox" | head -5; echo
 echo "--- watchdog ---"; ls /dev/watchdog* 2>/dev/null || echo "no watchdog"; echo
-echo "--- tpu ---"; ls /dev/*tpu* /dev/*npu* 2>/dev/null; dmesg | grep -iE "tpu|npu" | head -10; echo
-echo "--- wifi/bt ---"; ip -br link | grep -iE "wlan|bt" || echo "no wlan/bt iface"; dmesg | grep -i "aic8800" | head -5; echo
+echo "--- tpu ---"; ls /dev/*tpu* /dev/*npu* 2>/dev/null; lsmod | grep -i tpu; dmesg | grep -iE "tpu|npu" | head -10; echo
+echo "--- wifi/bt ---"; ip -br link | grep -iE "wlan|bt" || echo "no wlan/bt iface"; lsmod | grep -iE "aic8800|cfg80211" ; dmesg | grep -i "aic8800" | head -5; echo
+echo "--- selftest ---"; [ -f /var/log/hw-selftest.log ] && cat /var/log/hw-selftest.log || echo "no selftest log"; echo
 echo "--- spi-nor ---"; dmesg | grep -iE "spi-nor|m25p|w25q|gd25" | head -5; echo
 echo "--- modules ---"; lsmod | head -30
 echo "===== end ====="

@@ -1,0 +1,36 @@
+#!/bin/sh
+# milkv-load-wifi - load aic8800 WiFi/BT modules in the required order.
+#
+# !! WARNING - READ FIRST !!
+# aic8800_fdrv's module init calls aicbsp_set_subsys() and registers the
+# platform driver. On a machine WITHOUT the WiFi chip and its DT node
+# (e.g. QEMU 'virt') this dereferences a bad pointer and PANICS the kernel
+# (verified 2026-10-11: "Oops - load access fault" during insmod).
+# Only ever run this on the real Duo 256M. It is deliberately NOT wired into
+# any boot-time or self-test path.
+#
+# On real HW, if this panics, the panic text is the evidence we need - paste
+# it back rather than retrying.
+set -u
+MODDIR="${MODDIR:-/lib/modules/$(uname -r)/extra}"
+[ -d "$MODDIR" ] || { echo "no module dir $MODDIR"; exit 1; }
+
+# 1. bluetooth core (needed by btlpm)
+if ! lsmod | grep -q "^bluetooth"; then
+    find /lib/modules -name bluetooth.ko 2>/dev/null | head -1 | xargs -r insmod
+fi
+# 2. cfg80211 (wifi stack; aic8800_fdrv exports symbols into its namespace)
+if ! lsmod | grep -q "^cfg80211"; then
+    find /lib/modules -name cfg80211.ko 2>/dev/null | head -1 | xargs -r insmod
+fi
+# 3. bsp (powers the chip, provides aicbsp_* helpers)
+insmod "$MODDIR/aic8800_bsp.ko" && echo "bsp loaded"
+# 4. fdrv - THE ONE THAT CAN PANIC WITHOUT HARDWARE
+insmod "$MODDIR/aic8800_fdrv.ko" && echo "fdrv loaded"
+# 5. btlpm (bluetooth power management)
+insmod "$MODDIR/aic8800_btlpm.ko" && echo "btlpm loaded"
+
+echo "--- interfaces ---"
+ip -br link | grep -iE "wlan|bt" || echo "no wlan/bt interface yet (check dmesg)"
+echo "--- dmesg ---"
+dmesg | grep -i aic8800 | tail -10

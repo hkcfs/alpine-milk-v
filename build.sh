@@ -568,7 +568,7 @@ cp -r "$KERNEL_OUT/dtb" $ROOTFS_DIR/boot/ 2>/dev/null || true
 
 echo "Running second-stage setup..."
 cp scripts/second-stage.sh $ROOTFS_DIR/
-cp scripts/hw-probe.sh scripts/apply-overlays.sh $ROOTFS_DIR/ 2>/dev/null || true
+cp scripts/hw-probe.sh scripts/hw-selftest.sh scripts/apply-overlays.sh $ROOTFS_DIR/ 2>/dev/null || true
 cp -r packages $ROOTFS_DIR/packages 2>/dev/null || true
 
 # Mount proc/sys/dev for chroot

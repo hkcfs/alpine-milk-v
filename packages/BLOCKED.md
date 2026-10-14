@@ -27,7 +27,20 @@ added. Each entry: what was tried, what exists, what's missing.
   a buildable form.
 - Verdict: remoteproc path is the supported route; bare-8051 deferred.
 
-## TPU — PACKAGED + COMPILE-PROVEN (HW-unverified, NOT blocked)
+## aic8800 WiFi — BUILDS + bsp LOADS, fdrv PANICS WITHOUT HARDWARE
+
+- Builds clean on 7.2.10 (3 modules) and `aic8800_bsp.ko` loads in QEMU.
+- `aic8800_fdrv.ko` **panics the kernel on insmod when there is no WiFi
+  chip / DT node** — verified in QEMU 2026-10-11: `Oops - load access fault
+  [#1]` inside `rwnx_mod_init` → `aicbsp_set_subsys()` /
+  `aicsmac_driver_register()`. Almost certainly the no-hardware path, but
+  that is an assumption until the board says otherwise.
+- Handling: fdrv is NOT auto-loaded anywhere (no boot hook, no selftest
+  insmod). Loading it is a deliberate manual step via
+  `milkv-load-wifi` on the real board only.
+- HW session must try it and paste either the working path or the panic.
+
+## TPU — PACKAGED + COMPILE-PROVEN + LOADS (HW-unverified, NOT blocked)
 
 - Packaged: `packages/kernel-modules/tpu/` (vendor driver + interdrv
   headers + wrapper Makefile + shims, all documented in SOURCE).
@@ -39,3 +52,5 @@ added. Each entry: what was tried, what exists, what's missing.
   (redistribution unverified — spec 06 OPEN stands).
 - Runtime needs an ION-compatible exporter + firmware; proves in the HW
   session via HW-EVIDENCE TPU section.
+- QEMU 2026-10-11: `cv181x_tpu.ko` insmod SUCCESS (no device node on
+  QEMU's virt DTB, so it just idles — no hang, no panic).
