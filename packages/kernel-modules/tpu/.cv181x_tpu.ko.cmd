@@ -1,1 +1,1 @@
-savedcmd_cv181x_tpu.ko := riscv64-linux-ld -r -melf64lriscv -z noexecstack --build-id=sha1  -T /tmp/opencode/kernel-audit/src/scripts/module.lds -o cv181x_tpu.ko cv181x_tpu.o cv181x_tpu.mod.o .module-common.o
+savedcmd_cv181x_tpu.ko := riscv64-linux-ld -r -melf64lriscv -z noexecstack --build-id=sha1  -T /tmp/opencode/kt/src/scripts/module.lds -o cv181x_tpu.ko cv181x_tpu.o cv181x_tpu.mod.o .module-common.o

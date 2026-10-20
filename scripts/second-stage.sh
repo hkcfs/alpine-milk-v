@@ -118,6 +118,25 @@ for helper in hw-probe.sh hw-selftest.sh apply-overlays.sh; do
     fi
 done
 
+# DT overlays: enable the H.264 encoder + JPEG unit by default (the
+# video-codec overlay), and offer the rest commented out. The overlay is
+# what turns the CODA980 node on; without it the encoder never probes.
+if [ ! -f /etc/overlays.conf ]; then
+    {
+        echo "# One overlay per line: the .dtbo name from /boot/overlays."
+        echo "video-codec"
+        echo "#usb-device"
+        echo "#i2c1"
+        echo "#i2c4"
+        echo "#pwm0"
+        echo "#pwm1"
+        echo "#spi3"
+        echo "#uart1"
+        echo "#uart2"
+        echo "#c906l"
+    } > /etc/overlays.conf
+fi
+
 echo "Configuring system..."
 
 # Set hostname
@@ -190,6 +209,26 @@ rc-update del milkv-first-boot default 2>/dev/null || true
 rm -f /etc/runlevels/default/milkv-first-boot
 BOOTEOF
 chmod +x /usr/libexec/milkv/first-boot.sh
+
+# OpenRC service that applies the DT overlays at boot (configfs). The
+# video-codec overlay is what enables the CODA980 H.264 encoder and the
+# JPEG unit; without it they never probe.
+cat > /etc/init.d/milkv-overlays <<'OVEREOF'
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+description="Apply Milk-V device tree overlays"
+depend() {
+    need localmount
+    after modules devfs
+}
+start() {
+    ebegin "Applying DT overlays"
+    /usr/local/bin/apply-overlays.sh >/dev/null 2>&1
+    eend 0
+}
+OVEREOF
+chmod +x /etc/init.d/milkv-overlays
+rc-update add milkv-overlays default 2>/dev/null || true
 
 # Create OpenRC init script for first boot
 cat > /etc/init.d/milkv-first-boot <<'INITEOF'
