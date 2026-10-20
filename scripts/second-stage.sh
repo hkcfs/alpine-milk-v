@@ -65,9 +65,9 @@ if [ -d /packages ]; then
     echo "Installing custom kernel modules..."
     KVER=$(uname -r 2>/dev/null || true)
     # Recursive: out-of-tree builds leave .ko files in their source subdirs.
-    # find -print0 + read -d '' handles spaces in paths safely.
-    find /packages/kernel-modules -name '*.ko' -print0 2>/dev/null |
-    while IFS= read -r -d '' ko; do
+    # while read (not a for over $(find)) keeps paths with spaces intact.
+    find /packages/kernel-modules -name '*.ko' 2>/dev/null |
+    while IFS= read -r ko; do
         [ -e "$ko" ] || continue
         if [ -n "$KVER" ] && [ -d "/lib/modules/$KVER" ]; then
             mkdir -p "/lib/modules/$KVER/extra"
