@@ -47,12 +47,16 @@ added. Each entry: what was tried, what exists, what's missing.
 
 ## aic8800 WiFi — BUILDS + bsp LOADS, fdrv PANICS WITHOUT HARDWARE
 
-- Builds clean on 7.2.10 (3 modules) and `aic8800_bsp.ko` loads in QEMU.
+- Builds clean on 7.2.10 (3 modules, IN-TREE now, with Lukasz Sobala's
+  7.1/7.2 build patches) and `aic8800_bsp.ko` loads in QEMU.
 - `aic8800_fdrv.ko` **panics the kernel on insmod when there is no WiFi
-  chip / DT node** — verified in QEMU 2026-10-11: `Oops - load access fault
-  [#1]` inside `rwnx_mod_init` → `aicbsp_set_subsys()` /
-  `aicsmac_driver_register()`. Almost certainly the no-hardware path, but
-  that is an assumption until the board says otherwise.
+  chip / DT node** — verified twice (2026-10-11 on a hand-ported variant,
+  2026-10-20 on the upstream-patch build): `Oops - load access fault [#1]`
+  -> `Kernel panic - not syncing: Fatal exception in interrupt`, inside
+  `rwnx_mod_init` -> `aicbsp_set_subsys()` / `aicsmac_driver_register()`.
+  Without cfg80211 present it fails cleanly instead ("Unknown symbol").
+  This is the no-hardware path (QEMU `virt` has no SG2002 WiFi) — assumed
+  to be QEMU-only, but UNVERIFIED until the board says otherwise.
 - Handling: fdrv is NOT auto-loaded anywhere (no boot hook, no selftest
   insmod). Loading it is a deliberate manual step via
   `milkv-load-wifi` on the real board only.

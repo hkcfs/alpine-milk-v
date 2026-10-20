@@ -14,17 +14,20 @@ kernel: version-gated at 7.0/6.19 by upstream; the 7.1/7.2 patches keep it
   building on 7.2.x
 verified: builds clean on 7.2.10 (riscv64 gcc 10.3) -> aic8800_fdrv.ko,
   aic8800_bsp.ko, aic8800_btlpm.ko
-RUNTIME HAZARD (found 2026-10-11, QEMU): aic8800_bsp.ko loads fine, but
+RUNTIME HAZARD (found 2026-10-11, RE-VERIFIED 2026-10-20 with the upstream
+  7.1/7.2 patches: same failure mode): aic8800_bsp.ko loads fine, but
   aic8800_fdrv.ko PANICS the kernel during insmod when the WiFi chip and its
-  DT node are absent: "Oops - load access fault [#1]" inside module_init
+  DT node are absent: "Oops - load access fault [#1]" then "Kernel panic -
+  not syncing: Fatal exception in interrupt", inside module_init
   (rwnx_mod_init -> aicbsp_set_subsys / aicsmac_driver_register, which
-  dereference a bad pointer when no hardware is present). Likely
-  QEMU-specific (no chip, no DT node) - UNVERIFIED on real HW.
+  dereference a bad pointer when no hardware is present).
+  Note: without cfg80211 loaded it fails cleanly ("Unknown symbol in
+  module") - the panic needs cfg80211 present, i.e. the driver's own
+  init path.
+  This is the no-hardware path (QEMU 'virt' has no SG2002 WiFi), so it
+  should NOT happen on the real board, but that is UNVERIFIED.
   => Never auto-load fdrv. Only packages/userspace-src/.../milkv-load-wifi
-     loads it, with a loud warning, by hand, on the board only.
-  (Re-test pending on the upstream-patch build; the hand-ported variant
-   that was tested had the same failure mode.)
-7.2 port fixes (ours, minimal, in-tree):
+     loads it, with a loud warning, by hand, on the board only.7.2 port fixes (ours, minimal, in-tree):
   - dropped stale #include <linux/of_gpio.h> x3 (header removed 6.x; only
     legacy gpio_* used, still present)
   - rwnx_msg_tx.c: +#include <linux/string.h>; strncpy -> strscpy
