@@ -23,7 +23,7 @@ echo "--- remoteproc ---"; ls /sys/class/remoteproc/ 2>/dev/null || echo "no rem
 echo "--- mailbox ---"; dmesg | grep -i "mbox\|mailbox" | head -5; echo
 echo "--- watchdog ---"; ls /dev/watchdog* 2>/dev/null || echo "no watchdog"; echo
 echo "--- tpu ---"; ls /dev/*tpu* /dev/*npu* 2>/dev/null; lsmod | grep -i tpu; dmesg | grep -iE "tpu|npu" | head -10; echo
-echo "--- wifi/bt ---"; ip -br link | grep -iE "wlan|bt" || echo "no wlan/bt iface"; lsmod | grep -iE "aic8800|cfg80211" ; dmesg | grep -i "aic8800" | head -5; echo
+echo "--- wifi/bt ---"; echo "n/a: the Duo 256M has no WiFi/BT radio"; echo
 echo "--- selftest ---"; [ -f /var/log/hw-selftest.log ] && cat /var/log/hw-selftest.log || echo "no selftest log"; echo
 echo "--- spi-nor ---"; dmesg | grep -iE "spi-nor|m25p|w25q|gd25" | head -5; echo
 echo "--- modules ---"; lsmod | head -30

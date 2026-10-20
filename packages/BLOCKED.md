@@ -45,22 +45,15 @@ added. Each entry: what was tried, what exists, what's missing.
   buildable form.
 - Verdict: remoteproc path is the supported route; bare-8051 deferred.
 
-## aic8800 WiFi — BUILDS + bsp LOADS, fdrv PANICS WITHOUT HARDWARE
+## aic8800 WiFi — DROPPED, the Duo 256M has no radio
 
-- Builds clean on 7.2.10 (3 modules, IN-TREE now, with Lukasz Sobala's
-  7.1/7.2 build patches) and `aic8800_bsp.ko` loads in QEMU.
-- `aic8800_fdrv.ko` **panics the kernel on insmod when there is no WiFi
-  chip / DT node** — verified twice (2026-10-11 on a hand-ported variant,
-  2026-10-20 on the upstream-patch build): `Oops - load access fault [#1]`
-  -> `Kernel panic - not syncing: Fatal exception in interrupt`, inside
-  `rwnx_mod_init` -> `aicbsp_set_subsys()` / `aicsmac_driver_register()`.
-  Without cfg80211 present it fails cleanly instead ("Unknown symbol").
-  This is the no-hardware path (QEMU `virt` has no SG2002 WiFi) — assumed
-  to be QEMU-only, but UNVERIFIED until the board says otherwise.
-- Handling: fdrv is NOT auto-loaded anywhere (no boot hook, no selftest
-  insmod). Loading it is a deliberate manual step via
-  `milkv-load-wifi` on the real board only.
-- HW session must try it and paste either the working path or the panic.
+- The Milk-V Duo 256M has no WiFi or Bluetooth on board (that is the Duo S).
+  The driver, its firmware, its build patches and the userspace helpers were
+  removed from this project.
+- Kept only as a record, because it was real work: the vendor driver builds
+  on 7.2 with Lukasz Sobala's 7.1/7.2 patches, and `aic8800_fdrv` PANICS the
+  kernel on insmod when no WiFi chip is present (QEMU). If the Duo S is ever
+  supported here, that hazard is the first thing to remember.
 
 ## TPU — PACKAGED + COMPILE-PROVEN + LOADS (HW-unverified, NOT blocked)
 

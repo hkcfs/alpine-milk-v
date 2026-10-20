@@ -61,10 +61,14 @@ else rep FAIL mailbox "no probe line"; fi
 ip -br link 2>/dev/null | grep -q "eth0\|en" && rep PASS net "$(ip -br link | head -2 | tr '\n' ' ')" || rep SKIP net "no eth yet"
 [ -d /sys/kernel/config/usb_gadget ] && rep PASS usb-configfs "gadget framework present" || rep SKIP usb-configfs "no configfs gadget"
 [ -f /etc/milkv-usb-mode ] && rep PASS usb-mode "$(cat /etc/milkv-usb-mode)" || rep SKIP usb-mode "not configured"
-# wifi: driver file present? interface up?
-if ls /lib/modules/*/extra/aic8800_fdrv.ko >/dev/null 2>&1 || ls /lib/modules/*/kernel/drivers/net/wireless/aic8800* >/dev/null 2>&1; then
-    ip link 2>/dev/null | grep -q wlan && rep PASS wifi "wlan iface present" || rep SKIP wifi "module present, no iface (needs HW)"
-else rep SKIP wifi "aic8800 module absent"; fi
+# wifi: the Milk-V Duo 256M has NO WiFi/BT radio on board (that is the
+# Duo S), so there is nothing to check here. Kept as a SKIP with the reason
+# so the log does not look like something was missed.
+if ls /sys/class/net/wlan* /sys/class/net/bt* >/dev/null 2>&1; then
+    rep PASS wifi "wireless iface present"
+else
+    rep SKIP wifi "Duo 256M has no WiFi/BT on board"
+fi
 
 # --- overlays ---
 if [ -d /boot/overlays ] || [ -d /boot/vendor ]; then rep PASS overlays "overlay dir present"

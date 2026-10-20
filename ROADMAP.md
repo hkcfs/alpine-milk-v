@@ -6,10 +6,12 @@ provides. No per-phase HW proof exists; QEMU `virt` cannot prove SG2002
 hardware.
 
 **Updated 2026-10-20:** the 25-patch out-of-tree series is obsolete — Linux
-7.2.10 upstream now ships the Duo 256M board DTB, the thermal/PWM/MDIO/eFuse/
-remoteproc/I2S drivers, the CODA980 H.264 + JPEG encoders, the GC2083 sensor
-and the SG2000 DT overlays. The series is deleted; only the aic8800 WiFi
-driver (in-tree, vendor) and the TPU (vendored, out-of-tree) remain ours.
+7.2.10 upstream now ships the thermal/PWM/MDIO/eFuse/remoteproc/I2S
+drivers, the CODA980 H.264 + JPEG encoders, the GC2083 sensor and the
+SG2000 DT overlays. It is replaced by a 53-patch series (shared riscv+arm64,
+from the Armbian `sophgo-sg200x` family) plus our own arm64 SG2002 device
+tree. **arm64 now runs mainline** — the vendor scpcom 5.10 tree is gone.
+aic8800 was dropped: the Duo 256M has no WiFi/BT radio.
 See `kernel/patches/STATUS.md` for the full audit.
 
 Forward map: linear — every phase touches the kernel tree / build, so phases

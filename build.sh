@@ -180,23 +180,19 @@ KERNEL_TAG="v${LATEST_STABLE}"
 KERNEL_DIR="/project/kernel/linux"
 
 # Select patches, defconfig and kernel source based on architecture.
-# riscv keeps the latest stable mainline kernel. arm64 for the Duo 256M uses the
-# proven vendor kernel from scpcom (github.com/scpcom/linux, branch
-# licheervnano-merged-5.10.y) because mainline Linux has NO arm64 SG2002 support
-# (the SoC only got arm64 DTBs in vendor trees). This is what actually boots the
-# board in arm64 mode.
+# Both architectures build the SAME vanilla mainline kernel; only the arch
+# and the board DTB differ. arm64 is mainline since our own SG2002 arm64
+# device tree landed (kernel/dts-arm64/), which the vendor scpcom 5.10 tree
+# used to be needed for.
 if [ "$ARCH_TARGET" = "arm64" ]; then
-    PATCHES_DIR="/project/kernel/arm64-sg200x/patches"
-    KERNEL_DEFCONFIG="duo256m_defconfig"
-    KERNEL_MODE="scpcom"
-    KERNEL_REPO="https://github.com/scpcom/linux.git"
-    KERNEL_BRANCH="licheervnano-merged-5.10.y"
-    KERNEL_REF="f5fb0eb"
-    KERNEL_DISPLAY="Linux 5.10.260 (scpcom vendor, licheervnano-merged-5.10.y @ $KERNEL_REF)"
-    DTS_SRC="/project/kernel/arm64-sg200x/dts"
-    BOARD_DTB="sophgo/cv181x_milkv_duo256m_sd.dtb"
-    # NOTE: arm64 still rides the vendor scpcom tree (see the arch branch
-    # above). The riscv target uses the UPSTREAM mainline DTB.
+    PATCHES_DIR="/project/kernel/patches"
+    KERNEL_DEFCONFIG="milkv-${BOARD}-arm64_defconfig"
+    KERNEL_MODE="vanilla"
+    KERNEL_REF="$LATEST_STABLE"
+    KERNEL_DISPLAY="Linux $LATEST_STABLE (arm64)"
+    DTS_SRC=""
+    # Our own arm64 SG2002 board DTB (added by the 0058 patch).
+    BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 else
     PATCHES_DIR="/project/kernel/patches"
     KERNEL_DEFCONFIG="milkv-${BOARD}_defconfig"
@@ -204,9 +200,8 @@ else
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE"
     DTS_SRC=""
-    # Upstream mainline ships the Duo 256M board DTB since 7.2
-    # (arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts). No out-of-tree
-    # board patch needed - it would only duplicate it under a different name.
+    # The board DTB comes from the 0036 patch in the series
+    # (sg2002-milkv-duo-256m.dts -> sg2002-milkv-duo-256m.dtb).
     BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 fi
 
@@ -215,8 +210,11 @@ fi
 # the volume so switching arches (vanilla vs scpcom) re-sources the correct tree.
 KERNEL_ID=""
 case "$KERNEL_MODE" in
-    vanilla) KERNEL_ID="vanilla:$LATEST_STABLE" ;;
-    scpcom)  KERNEL_ID="scpcom:$KERNEL_REF" ;;
+    # The arch is part of the id: the same source tree cannot be built as
+    # riscv and arm64 in the same volume (different .config, different
+    # ARCH=, different DTBs).
+    vanilla) KERNEL_ID="vanilla:$LATEST_STABLE:$ARCH_TARGET" ;;
+    scpcom)  KERNEL_ID="scpcom:$KERNEL_REF:$ARCH_TARGET" ;;
 esac
 NEED_SOURCE=1
 OLD_ID=$(cat "$KERNEL_DIR/.alpine-milkv-kernel-id" 2>/dev/null || echo "")
@@ -388,42 +386,10 @@ fi
 echo "" >> "$PATCH_LOG"
 echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
 
-# aic8800 Wi-Fi/BT driver: vendor sources copied INTO the kernel tree and
-# built as ordinary in-tree modules (same shape as the Armbian
-# sophgo-sg200x-aic8800 extension). The kernel-tree copies are patched with
-# kernel/patches-in-tree/*.patch, which only apply once the source is there -
-# so they are applied here, not in the main series loop above.
-AICSEMI_SRC="/project/packages/kernel-modules/aic8800/aicsemi"
-AICSEMI_DST="$KERNEL_DIR/drivers/net/wireless/aicsemi"
-if [ -d "$AICSEMI_SRC" ] && [ "$ARCH_TARGET" = "riscv" ]; then
-    echo "Adding aic8800 to the kernel tree (in-tree modules)..."
-    rm -rf "$AICSEMI_DST"
-    mkdir -p "$AICSEMI_DST"
-    cp -a "$AICSEMI_SRC/." "$AICSEMI_DST/"
-    for p in /project/kernel/patches-in-tree/*.patch; do
-        [ -e "$p" ] || continue
-        if git -C "$KERNEL_DIR" apply "$p" >/dev/null 2>&1; then
-            echo "  APPLIED: $(basename "$p")"
-        else
-            echo "  WARNING: aic8800 patch did not apply: $(basename "$p")"
-        fi
-    done
-    # The firmware path is compiled into the modules: aic8800_bsp/Makefile
-    # assigns it with '=' (overriding Kconfig), fdrv's takes Kconfig's value.
-    FW_DIR="/lib/firmware/aic8800/SDIO/aic8800D80"
-    sed -i "s|^CONFIG_AIC_FW_PATH = .*|CONFIG_AIC_FW_PATH = \"${FW_DIR}\"|" \
-        "$AICSEMI_DST/aic8800/aic8800_bsp/Makefile" 2>/dev/null || true
-    # Hook into the wireless Kconfig/Makefile.
-    WIRELESS_KCONFIG="$KERNEL_DIR/drivers/net/wireless/Kconfig"
-    if [ -f "$WIRELESS_KCONFIG" ] && ! grep -q "aicsemi/Kconfig" "$WIRELESS_KCONFIG"; then
-        sed -i 's|^source "drivers/net/wireless/admtek/Kconfig"|source "drivers/net/wireless/aicsemi/Kconfig"\n&|' "$WIRELESS_KCONFIG"
-    fi
-    WIRELESS_MAKEFILE="$KERNEL_DIR/drivers/net/wireless/Makefile"
-    if [ -f "$WIRELESS_MAKEFILE" ] && ! grep -q "aicsemi/" "$WIRELESS_MAKEFILE"; then
-        echo 'obj-$(CONFIG_WLAN_VENDOR_AICSEMI) += aicsemi/' >> "$WIRELESS_MAKEFILE"
-    fi
-    echo "  aic8800 in-tree sources ready"
-fi
+# aic8800 Wi-Fi/BT: NOT shipped. The Milk-V Duo 256M has no WiFi or BT
+# radio on board (that is the Duo S), so the driver, its firmware and its
+# userspace helpers were removed. The 256M's sdhci1 stays enabled in the
+# board DTS for an external SDIO device.
 
 # Use our defconfig
 echo ""
@@ -451,14 +417,12 @@ grep -q 'CONFIG_VIRTIO_PCI=' .config || echo 'CONFIG_VIRTIO_PCI=y' >> .config
 grep -q 'CONFIG_NET_9P=' .config || echo 'CONFIG_NET_9P=y' >> .config
 grep -q 'CONFIG_NET_9P_VIRTIO=' .config || echo 'CONFIG_NET_9P_VIRTIO=y' >> .config
 grep -q 'CONFIG_9P_FS=' .config || echo 'CONFIG_9P_FS=y' >> .config
-# SG2000 peripherals: aic8800 Wi-Fi/BT (in-tree), CODA980 H.264 + JPEG
+# SG2002 peripherals: CODA980 H.264 + JPEG
 # encoders, GC2083 camera sensor. The media options must be =y for the
 # coda driver to be built into the image (it is not modular in the vendor
 # tree and the .dtso overlay selects it).
 grep -q 'CONFIG_MEDIA_SUPPORT=' .config || echo 'CONFIG_MEDIA_SUPPORT=y' >> .config
 grep -q 'CONFIG_VIDEO_CODA=' .config || echo 'CONFIG_VIDEO_CODA=y' >> .config
-grep -q 'CONFIG_WLAN_VENDOR_AICSEMI=' .config || echo 'CONFIG_WLAN_VENDOR_AICSEMI=y' >> .config
-grep -q 'CONFIG_AIC8800=' .config || echo 'CONFIG_AIC8800=y' >> .config
 grep -q 'CONFIG_VIDEO_GC2083=' .config || echo 'CONFIG_VIDEO_GC2083=m' >> .config
 grep -q 'CONFIG_CRC32=' .config || echo 'CONFIG_CRC32=y' >> .config
 

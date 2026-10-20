@@ -10,10 +10,3 @@
 # driver loads it from /lib/firmware/coda980.bin; without it the encoder
 # driver probes but produces no bitstream.
 https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/common/usr/share/fw_vcodec/coda980.bin coda980.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/aic_userconfig_8800d80.txt aic8800/SDIO/aic8800D80/aic_userconfig_8800d80.txt
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fmacfw_8800d80_u02.bin aic8800/SDIO/aic8800D80/fmacfw_8800d80_u02.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fmacfwbt_8800d80_u02.bin aic8800/SDIO/aic8800D80/fmacfwbt_8800d80_u02.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_adid_8800d80_u02.bin aic8800/SDIO/aic8800D80/fw_adid_8800d80_u02.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_patch_8800d80_u02.bin aic8800/SDIO/aic8800D80/fw_patch_8800d80_u02.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/fw_patch_table_8800d80_u02.bin aic8800/SDIO/aic8800D80/fw_patch_table_8800d80_u02.bin
-https://raw.githubusercontent.com/milkv-duo/duo-buildroot-sdk-v2/main/device/generic/rootfs_overlay/duos/mnt/system/firmware/aic8800/lmacfw_rf_8800d80_u02.bin aic8800/SDIO/aic8800D80/lmacfw_rf_8800d80_u02.bin
