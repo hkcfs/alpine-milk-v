@@ -1,9 +1,16 @@
 # ROADMAP.md — full peripheral support
 
 Current state: Alpine images for Duo 256M boot on both arches (riscv
-mainline + 25 out-of-tree patches; arm64 vendor tree). Peripheral coverage is
-whatever mainline + those patches happen to provide. No per-phase HW proof
-exists; QEMU `virt` cannot prove SG2002 hardware.
+mainline; arm64 vendor tree). Peripheral coverage is whatever mainline
+provides. No per-phase HW proof exists; QEMU `virt` cannot prove SG2002
+hardware.
+
+**Updated 2026-10-20:** the 25-patch out-of-tree series is obsolete — Linux
+7.2.10 upstream now ships the Duo 256M board DTB, the thermal/PWM/MDIO/eFuse/
+remoteproc/I2S drivers, the CODA980 H.264 + JPEG encoders, the GC2083 sensor
+and the SG2000 DT overlays. The series is deleted; only the aic8800 WiFi
+driver (in-tree, vendor) and the TPU (vendored, out-of-tree) remain ours.
+See `kernel/patches/STATUS.md` for the full audit.
 
 Forward map: linear — every phase touches the kernel tree / build, so phases
 run in order, no parallel waves. All phases in-MVP. Phase 05 is best-effort

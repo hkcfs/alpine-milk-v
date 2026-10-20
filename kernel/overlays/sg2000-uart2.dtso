@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: UART2 on the 26-pin header (J3).
+ *
+ *     pin 12   UART2_TX   XGPIOB[19]   VIVO_D2,  function 7
+ *     pin 15   UART2_RX   XGPIOB[22]   VIVO_CLK, function 7
+ *
+ * Enable with
+ *
+ *     overlays=uart2
+ *
+ * in /boot/armbianEnv.txt, for a third serial port on those two pins. It should
+ * come up as /dev/ttyS2; see the uart1 overlay for why that is probe order and
+ * not a promise.
+ *
+ * Note which pads these are *not*. The pads named UART2_RX/TX/CTS/RTS carry
+ * Bluetooth on this board - cvi_board_init() routes all four to uart4, which is
+ * the AIC8800's HCI - and the board DTS says so in a comment. Routing uart2
+ * there takes Bluetooth down with it. UART2 is reachable from the header only
+ * as an alternate function of other pads, which is what this overlay uses, and
+ * the two here are chosen because nothing else on J3 needs them: TX is also on
+ * pins 11, 23 and 26, RX also on pins 13 and 24, all of which the i2c1, spi3
+ * and pwm0 overlays want.
+ *
+ * No flow control: UART2_CTS and UART2_RTS reach only pins 9 and 7, and pin 9
+ * is GND on hardware v1.2 and later.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	uart2_cfg: uart2-cfg {
+		uart2-pins {
+			pinmux = <PINMUX(PIN_VIVO_D2, 7)>,
+				 <PINMUX(PIN_VIVO_CLK, 7)>;
+			power-source = <3300>;
+		};
+	};
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_cfg>;
+	status = "okay";
+};

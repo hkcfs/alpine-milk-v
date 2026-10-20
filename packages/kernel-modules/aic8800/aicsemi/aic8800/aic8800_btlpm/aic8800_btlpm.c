@@ -32,6 +32,7 @@
 #include <linux/bitops.h>
 #include <linux/termios.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #include <linux/pm_wakeirq.h>
 

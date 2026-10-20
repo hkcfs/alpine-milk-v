@@ -195,6 +195,8 @@ if [ "$ARCH_TARGET" = "arm64" ]; then
     KERNEL_DISPLAY="Linux 5.10.260 (scpcom vendor, licheervnano-merged-5.10.y @ $KERNEL_REF)"
     DTS_SRC="/project/kernel/arm64-sg200x/dts"
     BOARD_DTB="sophgo/cv181x_milkv_duo256m_sd.dtb"
+    # NOTE: arm64 still rides the vendor scpcom tree (see the arch branch
+    # above). The riscv target uses the UPSTREAM mainline DTB.
 else
     PATCHES_DIR="/project/kernel/patches"
     KERNEL_DEFCONFIG="milkv-${BOARD}_defconfig"
@@ -202,7 +204,10 @@ else
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE"
     DTS_SRC=""
-    BOARD_DTB="sophgo/sg2002-milkv-duo256m.dtb"
+    # Upstream mainline ships the Duo 256M board DTB since 7.2
+    # (arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts). No out-of-tree
+    # board patch needed - it would only duplicate it under a different name.
+    BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 fi
 
 # Download/clone kernel source into the persistent source volume.
@@ -383,6 +388,43 @@ fi
 echo "" >> "$PATCH_LOG"
 echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
 
+# aic8800 Wi-Fi/BT driver: vendor sources copied INTO the kernel tree and
+# built as ordinary in-tree modules (same shape as the Armbian
+# sophgo-sg200x-aic8800 extension). The kernel-tree copies are patched with
+# kernel/patches-in-tree/*.patch, which only apply once the source is there -
+# so they are applied here, not in the main series loop above.
+AICSEMI_SRC="/project/packages/kernel-modules/aic8800/aicsemi"
+AICSEMI_DST="$KERNEL_DIR/drivers/net/wireless/aicsemi"
+if [ -d "$AICSEMI_SRC" ] && [ "$ARCH_TARGET" = "riscv" ]; then
+    echo "Adding aic8800 to the kernel tree (in-tree modules)..."
+    rm -rf "$AICSEMI_DST"
+    mkdir -p "$AICSEMI_DST"
+    cp -a "$AICSEMI_SRC/." "$AICSEMI_DST/"
+    for p in /project/kernel/patches-in-tree/*.patch; do
+        [ -e "$p" ] || continue
+        if git -C "$KERNEL_DIR" apply "$p" >/dev/null 2>&1; then
+            echo "  APPLIED: $(basename "$p")"
+        else
+            echo "  WARNING: aic8800 patch did not apply: $(basename "$p")"
+        fi
+    done
+    # The firmware path is compiled into the modules: aic8800_bsp/Makefile
+    # assigns it with '=' (overriding Kconfig), fdrv's takes Kconfig's value.
+    FW_DIR="/lib/firmware/aic8800/SDIO/aic8800D80"
+    sed -i "s|^CONFIG_AIC_FW_PATH = .*|CONFIG_AIC_FW_PATH = \"${FW_DIR}\"|" \
+        "$AICSEMI_DST/aic8800/aic8800_bsp/Makefile" 2>/dev/null || true
+    # Hook into the wireless Kconfig/Makefile.
+    WIRELESS_KCONFIG="$KERNEL_DIR/drivers/net/wireless/Kconfig"
+    if [ -f "$WIRELESS_KCONFIG" ] && ! grep -q "aicsemi/Kconfig" "$WIRELESS_KCONFIG"; then
+        sed -i 's|^source "drivers/net/wireless/admtek/Kconfig"|source "drivers/net/wireless/aicsemi/Kconfig"\n&|' "$WIRELESS_KCONFIG"
+    fi
+    WIRELESS_MAKEFILE="$KERNEL_DIR/drivers/net/wireless/Makefile"
+    if [ -f "$WIRELESS_MAKEFILE" ] && ! grep -q "aicsemi/" "$WIRELESS_MAKEFILE"; then
+        echo 'obj-$(CONFIG_WLAN_VENDOR_AICSEMI) += aicsemi/' >> "$WIRELESS_MAKEFILE"
+    fi
+    echo "  aic8800 in-tree sources ready"
+fi
+
 # Use our defconfig
 echo ""
 echo "Configuring kernel..."
@@ -409,6 +451,16 @@ grep -q 'CONFIG_VIRTIO_PCI=' .config || echo 'CONFIG_VIRTIO_PCI=y' >> .config
 grep -q 'CONFIG_NET_9P=' .config || echo 'CONFIG_NET_9P=y' >> .config
 grep -q 'CONFIG_NET_9P_VIRTIO=' .config || echo 'CONFIG_NET_9P_VIRTIO=y' >> .config
 grep -q 'CONFIG_9P_FS=' .config || echo 'CONFIG_9P_FS=y' >> .config
+# SG2000 peripherals: aic8800 Wi-Fi/BT (in-tree), CODA980 H.264 + JPEG
+# encoders, GC2083 camera sensor. The media options must be =y for the
+# coda driver to be built into the image (it is not modular in the vendor
+# tree and the .dtso overlay selects it).
+grep -q 'CONFIG_MEDIA_SUPPORT=' .config || echo 'CONFIG_MEDIA_SUPPORT=y' >> .config
+grep -q 'CONFIG_VIDEO_CODA=' .config || echo 'CONFIG_VIDEO_CODA=y' >> .config
+grep -q 'CONFIG_WLAN_VENDOR_AICSEMI=' .config || echo 'CONFIG_WLAN_VENDOR_AICSEMI=y' >> .config
+grep -q 'CONFIG_AIC8800=' .config || echo 'CONFIG_AIC8800=y' >> .config
+grep -q 'CONFIG_VIDEO_GC2083=' .config || echo 'CONFIG_VIDEO_GC2083=m' >> .config
+grep -q 'CONFIG_CRC32=' .config || echo 'CONFIG_CRC32=y' >> .config
 
 echo "$WANT_PREPARE" > "$PREPARE_STAMP"
 fi  # end SKIP_PREPARE guard
@@ -620,13 +672,13 @@ mkdir -p "$OUTDIR/boot"
 cp "$KERNEL_OUT/Image" "$OUTDIR/boot/"
 cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
 
-# Compile DT overlays (kernel/overlays/*.dts -> boot/overlays/*.dtbo).
+# Compile DT overlays (kernel/overlays/*.dts|*.dtso -> boot/overlays/*.dtbo).
 if [ -d /project/kernel/overlays ]; then
     mkdir -p "$OUTDIR/boot/overlays"
-    for ov in /project/kernel/overlays/*.dts; do
+    for ov in /project/kernel/overlays/*.dts /project/kernel/overlays/*.dtso; do
         [ -e "$ov" ] || continue
-        dtc -@ -I dts -O dtb -o "$OUTDIR/boot/overlays/$(basename "$ov" .dts).dtbo" "$ov" 2>/dev/null \
-            && echo "Overlay built: $(basename "$ov" .dts).dtbo" \
+        dtc -@ -I dts -O dtb -o "$OUTDIR/boot/overlays/$(basename "$ov" | sed 's/\.[^.]*$//').dtbo" "$ov" 2>/dev/null \
+            && echo "Overlay built: $(basename "$ov" | sed 's/\.[^.]*$//').dtbo" \
             || echo "WARNING: overlay failed to compile: $ov"
     done
 fi

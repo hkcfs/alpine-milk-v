@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: turn the USB port around, from host to device.
+ *
+ * The board has one dwc2 controller behind one PHY, shared between the Type-C
+ * receptacle and the Type-A port, and the base device tree gives it to the
+ * Type-A port: dr_mode = "host". That is the right default for a board with
+ * ethernet, but it costs the Duo S the trick it is best known for - plug the
+ * Type-C into a laptop and the board comes up as a USB network adapter, a
+ * shell one ssh away with no serial cable, no card reader and no router in the
+ * way.
+ *
+ * This overlay hands the controller to the Type-C side instead. Enable it with
+ *
+ *     overlays=usb-device
+ *
+ * in /boot/armbianEnv.txt, and reboot. dr_mode is read once, by
+ * dwc2_get_dr_mode() at probe, so the choice is a boot-time one; there is no
+ * runtime switch. The usual mechanism for one - usb-role-switch on &usb - hangs
+ * this SoC in probe, which is why the base tree pins a role at all instead of
+ * leaving mainline's "otg". The patch that set dr_mode = "host" has the detail.
+ *
+ * The kernel side is all this overlay does. What turns a UDC into a network
+ * interface is the CDC-NCM gadget composed by sg200x-usb-gadget.service, which
+ * is installed on every SG200x image and exits immediately unless a UDC has
+ * appeared - so it costs nothing when this overlay is not enabled, and needs no
+ * setting up when it is.
+ *
+ * The Type-A port stops working while this is in effect. Serving both is the
+ * one thing a single controller cannot do.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&{/} {
+	/*
+	 * A supply that supplies nothing, to stand in for the Type-A port's VBUS
+	 * on &usbphy below.
+	 *
+	 * phy-supply is enabled from phy_power_on(), and peripheral mode still
+	 * reaches it: dwc2_hsotg_udc_start() calls dwc2_lowlevel_hw_enable() when
+	 * the gadget binds. Leaving the real regulator in place would therefore
+	 * push 5V out of the Type-A port for as long as the gadget is up, sourced
+	 * from a board that is itself being powered over the Type-C. The vendor's
+	 * own mode switcher drives both of those GPIOs low for device mode, for
+	 * the same reason.
+	 *
+	 * It has to be a redirect rather than a deletion: an overlay can override
+	 * the value of a property, but the flattened overlay format has no
+	 * encoding for removing one. Pointed elsewhere, reg_usb_vbus is left with
+	 * no consumer and the regulator core never enables it - nor its
+	 * vin-supply, reg_usb_aux0.
+	 *
+	 * No voltage constraints, deliberately. This stands in for a rail that is
+	 * not being driven, and naming a voltage would be a fiction that
+	 * regulator_get_voltage() would go on to repeat.
+	 */
+	reg_usb_no_vbus: regulator-usb-no-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "usb-vbus-off";
+	};
+};
+
+&usb {
+	dr_mode = "peripheral";
+};
+
+&usbphy {
+	phy-supply = <&reg_usb_no_vbus>;
+};

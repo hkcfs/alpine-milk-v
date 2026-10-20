@@ -41,6 +41,24 @@ with the dmesg lines attached.
 
 - [ ] Whatever shipped per its spec notes; blocked items stay unchecked.
 
+## Video / camera (upstream mainline 7.2.x)
+
+Apply the overlay first: `echo "video-codec" >> /etc/overlays.conf` (or
+`sg2000-video-codec`), reboot, then:
+
+- [ ] `ls /sys/class/video4linux/` shows the coda encoder + JPEG nodes.
+- [ ] H.264: encoder produces a stream (vendor `cvi_vc_drv` or any
+      v4l2-mem2mem client). Reference: 29.6 fps at 1080p on the Duo S.
+- [ ] JPEG unit: `/dev/video*` m2m device present, a still encodes.
+- [ ] `coda980.bin` present in /lib/firmware (the driver loads it; without
+      it the encoder probes but emits no bitstream).
+- [ ] GC2083 sensor (I2C): `i2cdetect` sees the sensor address; the
+      `camera-j1-gc2083` overlay enables it on Duo S. The 256M has no
+      CSI connector - sensor check is N/A there.
+- [ ] Camera RECEIVER/CAPTURE (`cv1800-csi2`, `cv1800-vi`) is NOT upstream
+      and NOT shipped: expect no video node on the 256M. (Blocked: the
+      upstream source repo is not publicly accessible.)
+
 ## Phase 06 — TPU
 
 - [ ] TPU device node and/or dmesg `tpu|npu` probe lines; inference proof if

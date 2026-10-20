@@ -23,7 +23,6 @@
 #include "rwnx_main.h"
 #include "rwnx_wakelock.h"
 
-#include <linux/string.h>
 const struct mac_addr mac_addr_bcst = {{0xFFFF, 0xFFFF, 0xFFFF}};
 
 /* Default MAC Rx filters that can be changed by mac80211
@@ -3429,7 +3428,7 @@ int rwnx_send_dbg_trigger_req(struct rwnx_hw *rwnx_hw, char *msg)
 		return -ENOMEM;
 
 	/* Set parameters for the MM_DBG_TRIGGER_REQ message */
-	strscpy(req->error, msg, sizeof(req->error));
+	strncpy(req->error, msg, sizeof(req->error));
 
 	/* Send the MM_DBG_TRIGGER_REQ message to LMAC FW */
 	return rwnx_send_msg(rwnx_hw, req, 0, -1, NULL);

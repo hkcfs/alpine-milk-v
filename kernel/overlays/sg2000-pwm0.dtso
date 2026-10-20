@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: the pwm0 chip's outputs on the 26-pin header (J3).
+ *
+ *     pin 11   PWM_1   XGPIOB[11]   VIVO_D10, function 0   -> &pwm0 1
+ *     pin 13   PWM_2   XGPIOB[12]   VIVO_D9,  function 0   -> &pwm0 2
+ *     pin 19   PWM_3   XGPIOB[13]   VIVO_D8,  function 0   -> &pwm0 3
+ *
+ * Enable with
+ *
+ *     overlays=pwm0
+ *
+ * in /boot/armbianEnv.txt. One pwmchip appears with four channels, of which
+ * channel 0 goes nowhere: PWM_0 is not brought out on either header.
+ *
+ * All three pins at once, not one overlay per pin, because a device tree node
+ * has exactly one "default" pinctrl state and the pinctrl core applies only
+ * that one. Two overlays each setting pinctrl-0 on &pwm0 would not compose -
+ * the second would silently replace the first, and one of the two pins would
+ * never be muxed. Per-chip is the finest grain that works. Take a local copy if
+ * you want a subset.
+ *
+ * Function 0 is the pads' reset function for pins 11 and 13, so those two come
+ * out of the BootROM as PWM already; declaring them here is what stops that
+ * from being an accident. Pin 19 defaults to VI2_D_8.
+ *
+ * There are alternates, if these three collide with something else you want:
+ * PWM_2 is also on pin 12 (function 6) and PWM_3 also on pin 3 (function 6).
+ * Swapping to those frees pins 13 and 19 for i2c1 and spi3 respectively, at the
+ * cost of pins 12 and 3, and needs a local copy of this file.
+ *
+ * Conflicts as shipped with i2c1 (pins 11, 13) and spi3 (pin 19).
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	pwm0_cfg: pwm0-cfg {
+		pwm0-pins {
+			pinmux = <PINMUX(PIN_VIVO_D10, 0)>,
+				 <PINMUX(PIN_VIVO_D9, 0)>,
+				 <PINMUX(PIN_VIVO_D8, 0)>;
+			power-source = <3300>;
+		};
+	};
+};
+
+&pwm0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm0_cfg>;
+	status = "okay";
+};

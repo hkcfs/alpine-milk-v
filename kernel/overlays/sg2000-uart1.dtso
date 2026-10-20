@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: UART1 on the 26-pin header (J3).
+ *
+ *     pin 18   UART1_TX   XGPIOA[19]   JTAG_CPU_TMS, function 6
+ *     pin 22   UART1_RX   XGPIOA[18]   JTAG_CPU_TCK, function 6
+ *
+ * Enable with
+ *
+ *     overlays=uart1
+ *
+ * in /boot/armbianEnv.txt, for a second serial port at 3.3V on those two pins.
+ *
+ * It should come up as /dev/ttyS1, but do not hardcode that: the board DTS
+ * aliases serial0 to uart0 and nothing else, so every other port takes the
+ * lowest free 8250 line number in probe order rather than one fixed by the
+ * device tree. Match on the device path if it matters.
+ *
+ * These pads are the CPU JTAG lines at reset, and the vendor bootloader has
+ * already given up on that: cvi_board_init() muxes both to plain GPIO, and
+ * Milk-V's own pinout hands them to a touch panel's interrupt and reset. So
+ * taking them for a second serial port costs nothing that was not already
+ * spent, and it is the only UART1 pairing on this header that does not collide
+ * with the console. UART1_TX and UART1_RX are also on pins 8 and 10 (function
+ * 4), which is where UART0 - the boot console - lives.
+ *
+ * No flow control. UART1_RTS is on pin 18 (function 4) and UART1_CTS on pin 22
+ * (function 4), i.e. the same two pads as TX and RX here; one pad cannot carry
+ * both, and nothing else on J3 reaches them.
+ *
+ * power-source = <1800> and the header is 3.3V, which looks wrong and is
+ * deliberate. Both pads are in the VDDIO_EMMC domain, which the board DTS
+ * already declares as 1800 for the eMMC group, and cv1800_set_power_cfg()
+ * rejects a second, different value for a domain it has already seen - the
+ * whole pin map fails, and the consumer never probes. The value feeds the
+ * drive-strength and schmitt translation in pinconf and writes no voltage
+ * register, and this group sets neither, so it is inert here. What VDDIO_EMMC
+ * actually is on this board has never been measured; until it has been, keeping
+ * every group in the domain on one value is the only safe option.
+ *
+ * Conflicts with the pwm1 overlay, which wants the same two pads for PWM_7 and
+ * PWM_6.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	uart1_cfg: uart1-cfg {
+		uart1-pins {
+			pinmux = <PINMUX(PIN_JTAG_CPU_TMS, 6)>,
+				 <PINMUX(PIN_JTAG_CPU_TCK, 6)>;
+			power-source = <1800>;
+		};
+	};
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_cfg>;
+	status = "okay";
+};

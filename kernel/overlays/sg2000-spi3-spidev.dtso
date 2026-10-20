@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: a spidev node on SPI3 chip select 0.
+ *
+ * Enable alongside the overlay that routes the pads:
+ *
+ *     overlays=spi3 spi3-spidev
+ *
+ * in /boot/armbianEnv.txt. On its own this one gives you /dev/spidev3.0 with no
+ * pins behind it, which is not useful; kept separate because a board with a
+ * real in-kernel driver on this bus wants spi3 without a spidev squatting on
+ * the chip select.
+ *
+ * "rohm,dh2228fv" is not what is on the bus. spidev refuses to bind to a node
+ * whose compatible is the bare string "spidev" - spidev_probe() warns and fails
+ * - so every board that wants a userspace SPI device borrows the compatible of
+ * some real part from spidev's own table. This is the one the rest of Armbian
+ * borrows; treat it as a keyword, not a claim about the hardware.
+ *
+ * 1 MHz is a deliberately unambitious default that works on a breadboard lead.
+ * spi-max-frequency is a ceiling, not a rate: the ioctl can ask for less, never
+ * more, so raise it here if the device on the other end can take it.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&spi3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	spidev3_0: spidev@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		status = "okay";
+	};
+};

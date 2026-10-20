@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: SPI3 on the 26-pin header (J3).
+ *
+ *     pin 19   SPI3_SDO    XGPIOB[13]   VIVO_D8, function 5   (MOSI)
+ *     pin 21   SPI3_SDI    XGPIOB[14]   VIVO_D7, function 5   (MISO)
+ *     pin 23   SPI3_SCK    XGPIOB[15]   VIVO_D6, function 5
+ *     pin 24   SPI3_CS_X   XGPIOB[16]   VIVO_D5, function 5   (CS0)
+ *
+ * Enable with
+ *
+ *     overlays=spi3
+ *
+ * in /boot/armbianEnv.txt. This routes the bus and nothing else - a bus with no
+ * devices on it registers and then sits there. Add a device as a child of &spi3
+ * in an overlay of your own, or use spi3-spidev for the userspace interface.
+ *
+ * As with i2c4, the vendor bootloader already routes these four pads and the
+ * bus therefore works today on inherited pin state; the overlay is what makes
+ * that independent of which bootloader ran.
+ *
+ * CS is the controller's own chip select on one line, so this bus addresses one
+ * device. num-cs stays at the driver default. For more, drive further selects
+ * as GPIOs with cs-gpios, which needs its own pinmux for whichever header pins
+ * you pick.
+ *
+ * Conflicts with the pwm0 overlay, which wants pin 19 for PWM_3.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	spi3_cfg: spi3-cfg {
+		spi3-pins {
+			pinmux = <PINMUX(PIN_VIVO_D8, 5)>,
+				 <PINMUX(PIN_VIVO_D7, 5)>,
+				 <PINMUX(PIN_VIVO_D6, 5)>,
+				 <PINMUX(PIN_VIVO_D5, 5)>;
+			power-source = <3300>;
+		};
+	};
+};
+
+&spi3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi3_cfg>;
+	status = "okay";
+};

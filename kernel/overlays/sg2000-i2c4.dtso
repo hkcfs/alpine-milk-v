@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: I2C4 on the 26-pin header (J3).
+ *
+ *     pin 3    IIC4_SCL   XGPIOB[20]   VIVO_D1, function 7
+ *     pin 5    IIC4_SDA   XGPIOB[21]   VIVO_D0, function 7
+ *
+ * Enable with
+ *
+ *     overlays=i2c4
+ *
+ * in /boot/armbianEnv.txt.
+ *
+ * These are the pins Milk-V's pinout labels I2C4, and the vendor bootloader
+ * already routes them: cvi_board_init() does PINMUX_CONFIG(VIVO_D1, IIC4_SCL)
+ * and PINMUX_CONFIG(VIVO_D0, IIC4_SDA), commented "I2C4 for TP" - the bus a
+ * touch panel would hang off. So this bus works today without any overlay, on
+ * inherited pin state. This overlay exists so that it stops depending on which
+ * bootloader ran, the same argument the eMMC pad group in the board DTS makes.
+ *
+ * No bias-pull-up here, unlike the i2c1 overlay: the vendor routes this bus for
+ * a panel that brings its own pull-ups, and the board is laid out for that.
+ * Add them in a local copy if your device does not.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	i2c4_cfg: i2c4-cfg {
+		i2c4-pins {
+			pinmux = <PINMUX(PIN_VIVO_D1, 7)>,
+				 <PINMUX(PIN_VIVO_D0, 7)>;
+			power-source = <3300>;
+		};
+	};
+};
+
+&i2c4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c4_cfg>;
+	status = "okay";
+};

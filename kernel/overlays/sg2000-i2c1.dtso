@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: I2C1 on the 26-pin header (J3).
+ *
+ *     pin 11   IIC1_SDA   XGPIOB[11]   VIVO_D10, function 6
+ *     pin 13   IIC1_SCL   XGPIOB[12]   VIVO_D9,  function 6
+ *
+ * Enable with
+ *
+ *     overlays=i2c1
+ *
+ * in /boot/armbianEnv.txt. The i2c1 controller is already enabled in the board
+ * device tree; nothing routes pads to it, which is why it does nothing until
+ * this overlay - or Milk-V's duo-pinmux - is used.
+ *
+ * These are not the pins Milk-V's published pinout labels I2C1. That labels
+ * pin 7 (XGPIOB[18], IIC1_SCL on function 5) and pin 9 (XGPIOB[17], IIC1_SDA
+ * on function 5), and pin 9 does not exist as a GPIO on current boards: it is
+ * XGPIOB[17] on hardware v1.1 and plain GND from v1.2 on. Nothing else on this
+ * header can carry IIC1_SDA, so the vendor pairing cannot be reproduced on a
+ * board anyone is buying today. Pins 11 and 13 can, and both are ordinary
+ * header pins on every revision.
+ *
+ * bias-pull-up because the Duo S has no pull-ups on these two pins - they are
+ * general-purpose header pins, not a dedicated bus - and an I2C bus with none
+ * at all does not come up. The internal ones are weak, about 60k, which is
+ * enough for a short lead at 100kHz and not much more. Fit real ones on the
+ * bus if it misbehaves; they simply parallel these.
+ *
+ * bias-pull-down = <0> is not redundant with that. These pads come up with the
+ * pull-down already enabled - conf reads 0x48 on every pad this overlay set
+ * touches - and cv1800_pconf_compute_config() puts only the properties a group
+ * actually names into its write mask, which cv1800_set_pinconf_config() then
+ * applies as a read-modify-write. So bias-pull-up on its own leaves both pulls
+ * on: 60k up against 62k down, which parks a released line near half rail, well
+ * short of the ~2.3V a 3.3V bus needs to read as a high. Naming the pull-down is
+ * what clears it. Check it rather than trusting it - conf on VIVO_D10 and
+ * VIVO_D9 in /sys/kernel/debug/pinctrl/3001000.pinctrl/pins reads 0x44 when this
+ * worked and 0x4c when it did not.
+ *
+ * Conflicts with the pwm0 overlay, which wants the same two pads for PWM_1 and
+ * PWM_2.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	i2c1_cfg: i2c1-cfg {
+		i2c1-pins {
+			pinmux = <PINMUX(PIN_VIVO_D10, 6)>,
+				 <PINMUX(PIN_VIVO_D9, 6)>;
+			bias-pull-up;
+			bias-pull-down = <0>;
+			power-source = <3300>;
+		};
+	};
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_cfg>;
+	status = "okay";
+};

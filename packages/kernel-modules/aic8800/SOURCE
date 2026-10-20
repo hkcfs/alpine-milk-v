@@ -1,8 +1,17 @@
 source: https://github.com/queenkjuul/aic8800-milkv-duos @ ccf8fd059f70
 origin: extracted from milkv-duo/duo-buildroot-sdk-v2, cleaned for Linux 7.0
-license: see LICENSE in this dir (driver); firmware NOT included (license unknown)
-kernel: version-gated at 7.0/6.19 by upstream; verify on newer stable at build time
-build: BUILD_DIR subdir via build.sh out-of-tree hook (CONFIG_PLATFORM_CVITEK=y preset)
+license: see LICENSE in this dir (driver); firmware NOT included (see
+  packages/firmware-manifest, blobs from the vendor SDK)
+build: IN-TREE. The sources are copied into the kernel tree at
+  drivers/net/wireless/aicsemi/ by build.sh and patched with
+  kernel/patches-in-tree/aic8800-Fix-building-on-7.{1,2}-kernel.patch
+  (Lukasz Sobala's, version-guarded for 7.0 and 7.2), then hooked into
+  drivers/net/wireless/{Kconfig,Makefile} and built as ordinary in-tree
+  modules. Same shape as Armbian's sophgo-sg200x-aic8800 extension.
+firmware: /lib/firmware/aic8800/SDIO/aic8800D80 (compiled into the modules;
+  both the bsp Makefile and CONFIG_AIC_FW_PATH are set by build.sh)
+kernel: version-gated at 7.0/6.19 by upstream; the 7.1/7.2 patches keep it
+  building on 7.2.x
 verified: builds clean on 7.2.10 (riscv64 gcc 10.3) -> aic8800_fdrv.ko,
   aic8800_bsp.ko, aic8800_btlpm.ko
 RUNTIME HAZARD (found 2026-10-11, QEMU): aic8800_bsp.ko loads fine, but
@@ -13,6 +22,8 @@ RUNTIME HAZARD (found 2026-10-11, QEMU): aic8800_bsp.ko loads fine, but
   QEMU-specific (no chip, no DT node) - UNVERIFIED on real HW.
   => Never auto-load fdrv. Only packages/userspace-src/.../milkv-load-wifi
      loads it, with a loud warning, by hand, on the board only.
+  (Re-test pending on the upstream-patch build; the hand-ported variant
+   that was tested had the same failure mode.)
 7.2 port fixes (ours, minimal, in-tree):
   - dropped stale #include <linux/of_gpio.h> x3 (header removed 6.x; only
     legacy gpio_* used, still present)

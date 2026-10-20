@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Milk-V Duo S: the pwm1 chip's outputs on the 26-pin header (J3).
+ *
+ *     pin 22   PWM_6   XGPIOA[18]   JTAG_CPU_TCK, function 2   -> &pwm1 2
+ *     pin 18   PWM_7   XGPIOA[19]   JTAG_CPU_TMS, function 2   -> &pwm1 3
+ *
+ * Enable with
+ *
+ *     overlays=pwm1
+ *
+ * in /boot/armbianEnv.txt. Four channels appear and two of them go nowhere:
+ * PWM_4 and PWM_5, channels 0 and 1, are on pins 8 and 10, which carry the boot
+ * console. This overlay leaves them alone. Wiring them up means giving up the
+ * serial console, so it belongs in a local copy and not in a shipped default.
+ *
+ * See the pwm0 overlay for why the channels of one chip are muxed together
+ * rather than one overlay per pin.
+ *
+ * power-source = <1800> on a 3.3V header is deliberate; the uart1 overlay,
+ * which shares these two pads, explains it.
+ *
+ * Conflicts with the uart1 overlay, which wants both of these pads.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/pinctrl-sg2000.h>
+
+&pinctrl {
+	pwm1_cfg: pwm1-cfg {
+		pwm1-pins {
+			pinmux = <PINMUX(PIN_JTAG_CPU_TCK, 2)>,
+				 <PINMUX(PIN_JTAG_CPU_TMS, 2)>;
+			power-source = <1800>;
+		};
+	};
+};
+
+&pwm1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm1_cfg>;
+	status = "okay";
+};
