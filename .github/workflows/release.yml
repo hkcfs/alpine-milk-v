@@ -20,7 +20,10 @@ permissions:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    # Pinned on purpose: `ubuntu-latest` jumped 24.04 -> 26.04 and that
+    # silently virtualized the `qemu-system-riscv64` package, breaking this
+    # workflow. A release pipeline must not change under us between runs.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -39,21 +42,30 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update
           # NOTE: `qemu-system-riscv64` is a VIRTUAL package on Ubuntu >= 25.10
-          # (what ubuntu-latest now runs, e.g. 26.04 "resolute"). It is merely
+          # (what ubuntu-latest became, e.g. 26.04 "resolute"). It is merely
           # provided by the real `qemu-system-riscv` / `qemu-system-riscv-hwe`
           # packages, so installing the virtual name fails with:
           #   E: Package 'qemu-system-riscv64' has no installation candidate
           # The package `qemu-system-riscv` still ships the BINARY we exec
           # (/usr/bin/qemu-system-riscv64), so install the package names and
           # fall back to the -hwe variants.
+          #
+          # Keep apt bounded. A runner whose DNS cannot resolve the Ubuntu
+          # archives otherwise stalls for half an hour on apt's DNS retry
+          # backoff, which is indistinguishable from a hang.
+          APT_OPTS="-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          sudo timeout --kill-after=30s 300s apt-get $APT_OPTS update
           for pkg in qemu-system-riscv qemu-system-arm; do
-            sudo apt-get install -y "$pkg" \
-              || sudo apt-get install -y "${pkg}-hwe" \
+            sudo timeout --kill-after=30s 600s \
+              apt-get $APT_OPTS install -y --no-install-recommends "$pkg" \
+              || sudo timeout --kill-after=30s 600s \
+                 apt-get $APT_OPTS install -y --no-install-recommends "${pkg}-hwe" \
               || echo "::warning::could not install $pkg"
           done
-          sudo apt-get install -y sshpass mtools util-linux
+          sudo timeout --kill-after=30s 600s \
+            apt-get $APT_OPTS install -y --no-install-recommends \
+            sshpass mtools util-linux
           # Fail loudly here rather than halfway through the 40-minute build.
           command -v qemu-system-riscv64
           command -v qemu-system-aarch64
@@ -156,7 +168,7 @@ jobs:
 
   release-notes:
     needs: image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
