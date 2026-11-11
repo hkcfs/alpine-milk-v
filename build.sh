@@ -188,18 +188,31 @@ if [ "$ARCH_TARGET" = "arm64" ]; then
     KERNEL_MODE="vanilla"
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE (arm64)"
-    # Our own arm64 SG2002 board DTB (added by the 0058 patch).
-    BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 else
     PATCHES_DIR="/project/kernel/patches"
     KERNEL_DEFCONFIG="milkv-${BOARD}_defconfig"
     KERNEL_MODE="vanilla"
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE"
-    # The board DTB comes from the 0036 patch in the series
-    # (sg2002-milkv-duo-256m.dts -> sg2002-milkv-duo-256m.dtb).
-    BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 fi
+
+# Board DTB candidates, most preferred first.
+#
+#   sg2002-milkv-duo-256m.dtb  ours: the Duo 256M board with every peripheral
+#                              enabled (ethernet, PWM, I2C, eFuse, I2S, ...).
+#                              riscv: patch 0036. arm64: patch 0058.
+#   sg2002-milkv-duo256m.dtb   upstream's own Duo 256M board (no dash). Less
+#                              capable (no ethernet; that lives in an overlay),
+#                              but it is in mainline, so it is the fallback if
+#                              our patch ever stops applying.
+#
+# Accepting either means a kernel bump that drops our patch cannot silently
+# drop the board DTB and fail the image build.
+BOARD_DTB_CANDIDATES="sg2002-milkv-duo-256m.dtb sg2002-milkv-duo256m.dtb"
+# Where the board .dts sources live in the kernel tree for this arch. Set here
+# (not inside the prepare guard) because the DTB build below uses it on
+# incremental builds too.
+BOARD_DTS_DIR="arch/${ARCH_TARGET}/boot/dts/sophgo"
 
 # Download/clone kernel source into the persistent source volume.
 # A single marker (.alpine-milkv-kernel-id) records WHICH kernel is currently in
@@ -362,17 +375,20 @@ if [ "$ARCH_TARGET" = "arm64" ]; then
     cp "$DEFCONFIG_SRC" arch/arm64/configs/duo256m_defconfig
 fi
 
-# Ensure our board DTB is registered in the sophgo Makefile for this arch
+# Ensure the board DTBs are registered in the sophgo Makefile for this arch
 # (the patch's Makefile hunk may fail to apply across kernel versions). This runs
-# for both riscv and arm64 so the Duo 256M DTB is always built.
+# for both riscv and arm64 so the Duo 256M DTB is always built. Every candidate
+# whose .dts is present in the tree gets registered.
 SOPHGO_MK="arch/${ARCH_TARGET}/boot/dts/sophgo/Makefile"
 rm -f "${SOPHGO_MK}.rej"
-DTB_NAME="$BOARD_DTB"
-DTB_NAME="${DTB_NAME##*/}"
-if [ -f "$SOPHGO_MK" ] && ! grep -q "$DTB_NAME" "$SOPHGO_MK"; then
-    echo "dtb-\$(CONFIG_ARCH_SOPHGO) += $DTB_NAME" >> "$SOPHGO_MK"
-    echo "  Registered $DTB_NAME in $SOPHGO_MK"
-fi
+for DTB_NAME in $BOARD_DTB_CANDIDATES; do
+    # Only register a DTB we actually have the source for.
+    [ -f "$BOARD_DTS_DIR/${DTB_NAME%.dtb}.dts" ] || continue
+    if [ -f "$SOPHGO_MK" ] && ! grep -q "$DTB_NAME" "$SOPHGO_MK"; then
+        echo "dtb-\$(CONFIG_ARCH_SOPHGO) += $DTB_NAME" >> "$SOPHGO_MK"
+        echo "  Registered $DTB_NAME in $SOPHGO_MK"
+    fi
+done
 echo "" >> "$PATCH_LOG"
 echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
 
@@ -421,17 +437,20 @@ make -j"$JOBS" $KMAKE_CC Image modules </dev/null > "$KBUILD_LOG" 2>&1 || {
     tail -40 "$KBUILD_LOG"
     exit 1
 }
-# Build the board device tree. We build ONLY the target board DTB (not the full
-# `make dtbs`, which compiles every Sophgo board and aborts on any single broken
-# sibling DTS against newer kernels). The board DTB is what ships in the image's
-# boot partition; QEMU 'virt' supplies its own DTB for the boot test. The DTB
-# make target is the path relative to arch/<arch>/boot/dts/ (e.g. sophgo/...).
-# BOARD_DTB is set per-arch above (riscv: sg2002-milkv-duo256m.dtb,
-# arm64:    cv181x_milkv_duo256m_sd.dtb).
-if ! make -j"$JOBS" $KMAKE_CC "$BOARD_DTB" </dev/null >> "$KBUILD_LOG" 2>&1; then
-    echo "  WARNING: board DTB build reported errors (target: $BOARD_DTB)."
-    echo "  WARNING: board DTB build had errors" >> "$PATCH_LOG"
-fi
+# Build the board device tree. We build ONLY the target board DTBs (not the
+# full `make dtbs`, which compiles every Sophgo board and aborts on any single
+# broken sibling DTS against newer kernels). The board DTB is what ships in the
+# image's boot partition; QEMU 'virt' supplies its own DTB for the boot test.
+# The DTB make target is the path relative to arch/<arch>/boot/dts/ (e.g.
+# sophgo/...). Build every candidate we have the source for; the best one that
+# ends up in the output is picked as THE board DTB below.
+for DTB_NAME in $BOARD_DTB_CANDIDATES; do
+    [ -f "$BOARD_DTS_DIR/${DTB_NAME%.dtb}.dts" ] || continue
+    if ! make -j"$JOBS" $KMAKE_CC "sophgo/$DTB_NAME" </dev/null >> "$KBUILD_LOG" 2>&1; then
+        echo "  WARNING: board DTB build reported errors (target: sophgo/$DTB_NAME)."
+        echo "  WARNING: board DTB build had errors ($DTB_NAME)" >> "$PATCH_LOG"
+    fi
+done
 tail -5 "$KBUILD_LOG"
 
 if command -v ccache >/dev/null 2>&1; then
@@ -453,6 +472,25 @@ else
 fi
 
 echo "Kernel built: $(ls -lh "$KERNEL_OUT/Image" | awk '{print $5}')"
+
+# Pick THE board DTB for this build: the most preferred candidate that was
+# actually built. Failing here is fatal - without a board DTB the FIT image
+# has nothing to boot.
+BOARD_DTB=""
+for DTB_NAME in $BOARD_DTB_CANDIDATES; do
+    if [ -f "$KERNEL_OUT/dtb/sophgo/$DTB_NAME" ]; then
+        BOARD_DTB="sophgo/$DTB_NAME"
+        break
+    fi
+done
+if [ -z "$BOARD_DTB" ]; then
+    echo "!!! No board DTB was built for $ARCH_TARGET." >&2
+    echo "    Looked for: $BOARD_DTB_CANDIDATES" >&2
+    echo "    in $KERNEL_OUT/dtb/sophgo/" >&2
+    tail -40 "$KBUILD_LOG" >&2
+    exit 1
+fi
+echo "Board DTB: $BOARD_DTB"
 cd /project
 
 # Build out-of-tree module sources: packages/kernel-modules/<name>/ with a

@@ -11,15 +11,15 @@ Signed-off-by: Inochi Amaoto <inochiama@gmail.com>
 ---
  drivers/net/mdio/Kconfig            |  10 +++
  drivers/net/mdio/Makefile           |   1 +
- drivers/net/mdio/mdio-mux-cv1800b.c | 119 ++++++++++++++++++++++++++++
+ drivers/net/mdio/mdio-mux-cv1800b.c | 119 +++++++++++++++++++++++++++
  3 files changed, 130 insertions(+)
  create mode 100644 drivers/net/mdio/mdio-mux-cv1800b.c
 
 diff --git a/drivers/net/mdio/Kconfig b/drivers/net/mdio/Kconfig
-index 44380378911b..b2e52f6a4e5d 100644
+index a05229838..d076ca2e5 100644
 --- a/drivers/net/mdio/Kconfig
 +++ b/drivers/net/mdio/Kconfig
-@@ -280,5 +280,15 @@ config MDIO_BUS_MUX_MMIOREG
+@@ -289,5 +289,15 @@ config MDIO_BUS_MUX_MMIOREG
  
  	  Currently, only 8/16/32 bits registers are supported.
  
@@ -33,20 +33,20 @@ index 44380378911b..b2e52f6a4e5d 100644
 +	  This module provides a driver for the MDIO multiplexer/glue of
 +	  the Sophgo CV1800 series SoC. The multiplexer connects either
 +	  the external or the internal MDIO bus to the parent bus.
- 
- endif
+ endmenu
+ endmenu
 diff --git a/drivers/net/mdio/Makefile b/drivers/net/mdio/Makefile
-index fbec636700e7..bd64370db23b 100644
+index 048586746..a4274a66d 100644
 --- a/drivers/net/mdio/Makefile
 +++ b/drivers/net/mdio/Makefile
-@@ -34,3 +34,4 @@ obj-$(CONFIG_MDIO_BUS_MUX_MESON_G12A)	+= mdio-mux-meson-g12a.o
+@@ -35,3 +35,4 @@ obj-$(CONFIG_MDIO_BUS_MUX_MESON_G12A)	+= mdio-mux-meson-g12a.o
  obj-$(CONFIG_MDIO_BUS_MUX_MESON_GXL)	+= mdio-mux-meson-gxl.o
  obj-$(CONFIG_MDIO_BUS_MUX_MMIOREG) 	+= mdio-mux-mmioreg.o
  obj-$(CONFIG_MDIO_BUS_MUX_MULTIPLEXER) 	+= mdio-mux-multiplexer.o
 +obj-$(CONFIG_MDIO_BUS_MUX_SOPHGO_CV1800B) += mdio-mux-cv1800b.o
 diff --git a/drivers/net/mdio/mdio-mux-cv1800b.c b/drivers/net/mdio/mdio-mux-cv1800b.c
 new file mode 100644
-index 000000000000..6c69e83c3dcd
+index 000000000..6c69e83c3
 --- /dev/null
 +++ b/drivers/net/mdio/mdio-mux-cv1800b.c
 @@ -0,0 +1,119 @@
@@ -171,4 +171,3 @@ index 000000000000..6c69e83c3dcd
 +MODULE_LICENSE("GPL");
 -- 
 2.34.1
-

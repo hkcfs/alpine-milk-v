@@ -5,27 +5,14 @@ Subject: [PATCH 36/37] riscv: dts: sophgo: add board support for Milk-V Duo
  256M (sg2002)
 
 ---
- arch/riscv/boot/dts/sophgo/Makefile           |   1 +
- .../boot/dts/sophgo/sg2002-milkv-duo-256m.dts | 150 ++++++++++++++++++
+ arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts | 150 ++++++++++++++++++
  arch/riscv/boot/dts/sophgo/sg2002.dtsi        |  21 +++
- 3 files changed, 172 insertions(+)
+ 2 files changed, 171 insertions(+)
  create mode 100644 arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts
 
-diff --git a/arch/riscv/boot/dts/sophgo/Makefile b/arch/riscv/boot/dts/sophgo/Makefile
-index 58cc6b70d8de..d6c65e93132d 100644
---- a/arch/riscv/boot/dts/sophgo/Makefile
-+++ b/arch/riscv/boot/dts/sophgo/Makefile
-@@ -2,6 +2,7 @@
- dtb-$(CONFIG_ARCH_SOPHGO) += cv1800b-milkv-duo.dtb
- dtb-$(CONFIG_ARCH_SOPHGO) += cv1812h-huashan-pi.dtb
- dtb-$(CONFIG_ARCH_SOPHGO) += sg2000-milkv-duo-s.dtb
-+dtb-$(CONFIG_ARCH_SOPHGO) += sg2002-milkv-duo-256m.dtb
- dtb-$(CONFIG_ARCH_SOPHGO) += sg2002-licheerv-nano-b.dtb
- dtb-$(CONFIG_ARCH_SOPHGO) += sg2042-milkv-pioneer.dtb
- dtb-$(CONFIG_ARCH_SOPHGO) += sg2042-evb-v1.dtb
 diff --git a/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts
 new file mode 100644
-index 000000000000..3d06cfac6a10
+index 000000000..3d06cfac6
 --- /dev/null
 +++ b/arch/riscv/boot/dts/sophgo/sg2002-milkv-duo-256m.dts
 @@ -0,0 +1,150 @@
@@ -181,7 +168,7 @@ index 000000000000..3d06cfac6a10
 +};
 \ No newline at end of file
 diff --git a/arch/riscv/boot/dts/sophgo/sg2002.dtsi b/arch/riscv/boot/dts/sophgo/sg2002.dtsi
-index 98001cce238e..ca386cac1c2d 100644
+index 98001cce2..ca386cac1 100644
 --- a/arch/riscv/boot/dts/sophgo/sg2002.dtsi
 +++ b/arch/riscv/boot/dts/sophgo/sg2002.dtsi
 @@ -19,6 +19,27 @@ memory@80000000 {
@@ -214,4 +201,3 @@ index 98001cce238e..ca386cac1c2d 100644
  		dma-noncoherent;
 -- 
 2.34.1
-

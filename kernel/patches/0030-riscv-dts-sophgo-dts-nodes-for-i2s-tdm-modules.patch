@@ -9,14 +9,14 @@ more readable.
 
 Signed-off-by: Anton D. Stavinskii <stavinsky@gmail.com>
 ---
- arch/riscv/boot/dts/sophgo/cv180x-dmamux.h | 57 ++++++++++++++++++++++
- arch/riscv/boot/dts/sophgo/cv180x.dtsi     | 55 +++++++++++++++++++++
- 2 files changed, 112 insertions(+)
+ arch/riscv/boot/dts/sophgo/cv180x-dmamux.h | 57 +++++++++++++++++++++
+ arch/riscv/boot/dts/sophgo/cv180x.dtsi        | 61 ++++++++++++++++++-
+ 2 files changed, 117 insertions(+), 1 deletion(-)
  create mode 100644 arch/riscv/boot/dts/sophgo/cv180x-dmamux.h
 
 diff --git a/arch/riscv/boot/dts/sophgo/cv180x-dmamux.h b/arch/riscv/boot/dts/sophgo/cv180x-dmamux.h
 new file mode 100644
-index 000000000000..6314bf6e9dc8
+index 000000000..6314bf6e9
 --- /dev/null
 +++ b/arch/riscv/boot/dts/sophgo/cv180x-dmamux.h
 @@ -0,0 +1,57 @@
@@ -78,7 +78,7 @@ index 000000000000..6314bf6e9dc8
 +
 +#endif // _SOPHGO_CV18XX_DMAMUX
 diff --git a/arch/riscv/boot/dts/sophgo/cv180x.dtsi b/arch/riscv/boot/dts/sophgo/cv180x.dtsi
-index 523791003088..2175c59f6866 100644
+index b7c066c72..c876fe97d 100644
 --- a/arch/riscv/boot/dts/sophgo/cv180x.dtsi
 +++ b/arch/riscv/boot/dts/sophgo/cv180x.dtsi
 @@ -8,6 +8,7 @@
@@ -89,11 +89,11 @@ index 523791003088..2175c59f6866 100644
  
  / {
  	#address-cells = <1>;
-@@ -505,6 +506,60 @@ usb: usb@4340000 {
- 			status = "disabled";
+@@ -495,6 +496,60 @@ porte: gpio-controller@0 {
+ 			};
  		};
  
-+		i2s0: i2s@4100000 {
++				i2s0: i2s@4100000 {
 +			compatible = "sophgo,cv1800b-i2s";
 +			reg = <0x04100000 0x1000>;
 +			clocks = <&clk CLK_APB_I2S0>, <&clk CLK_SDMA_AUD0>;
@@ -152,4 +152,3 @@ index 523791003088..2175c59f6866 100644
  			reg = <0x5025000 0x2000>;
 -- 
 2.34.1
-
