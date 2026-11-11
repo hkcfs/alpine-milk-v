@@ -30,10 +30,10 @@ set -uo pipefail
 # same archive layout. Tried in order until apt-get update succeeds.
 if [ -z "${APT_MIRROR_PAIRS:-}" ]; then
     APT_MIRROR_PAIRS="
-http://archive.ubuntu.com/ubuntu/ http://ports.ubuntu.com/ubuntu-ports/
-http://azure.archive.ubuntu.com/ubuntu/ http://ports.ubuntu.com/ubuntu-ports/
-http://ftp.osuosl.org/pub/ubuntu/ http://mirrors.ustc.edu.cn/ubuntu-ports/
-http://mirrors.edge.kernel.org/ubuntu/ http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/
+http://archive.ubuntu.com/ubuntu http://ports.ubuntu.com/ubuntu-ports
+http://azure.archive.ubuntu.com/ubuntu http://ports.ubuntu.com/ubuntu-ports
+http://ftp.osuosl.org/pub/ubuntu http://mirrors.ustc.edu.cn/ubuntu-ports
+http://mirrors.edge.kernel.org/ubuntu http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
 "
 fi
 
@@ -60,12 +60,15 @@ apt_use_mirror() {
              /etc/apt/sources.list.d/*.list \
              /etc/apt/sources.list; do
         [ -f "$f" ] || continue
-        # ubuntu-ports first: the main pattern would otherwise match the
-        # "ubuntu.com/ubuntu" prefix of "ubuntu.com/ubuntu-ports".
+        # The main-archive pattern needs a boundary after "ubuntu" that is
+        # neither alphanumeric nor a dash, so it cannot also match the
+        # "ubuntu-ports" URL. Without that, the canonical pair (both hosts on
+        # *.ubuntu.com) rewrites the ports repository to ".../ubuntu/-ports"
+        # and apt rejects it with "does not have a Release file".
         apt_as_root sed -i -E \
-            "s#https?://[a-z0-9.-]*ubuntu\.com/ubuntu-ports/?#${ports}#g" "$f"
+            "s#https?://[^[:space:]]*ubuntu\.com/ubuntu-ports/*#${ports}/#g" "$f"
         apt_as_root sed -i -E \
-            "s#https?://[a-z0-9.-]*ubuntu\.com/ubuntu/?#${main}#g" "$f"
+            "s#https?://[^[:space:]]*ubuntu\.com/ubuntu([^[:alnum:]-]|\$)#${main}\1#g" "$f"
     done
 }
 
