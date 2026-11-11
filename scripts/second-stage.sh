@@ -4,6 +4,9 @@ set -e
 BOARD=$1
 HNAME=$2
 PASSWORD=$3
+# $4 (WIRELESS) is accepted for interface compatibility with build.sh but is
+# unused: the Milk-V Duo 256M has no WiFi/BT radio on board.
+# shellcheck disable=SC2034
 WIRELESS=$4
 
 [ -z "$BOARD" ] && { echo "No board!"; exit 1; }

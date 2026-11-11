@@ -69,7 +69,7 @@ QEMU_PID=$!
 # Wait for SSH, then collect diagnostics.
 DIAG="$WORK/diag.txt"
 : >"$DIAG"
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
     if sshpass -p milkv ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         -o ConnectTimeout=5 -p "$PORT" root@localhost \
         'echo "=== boot OK ==="; uname -a; echo "--- arch ---"; uname -m; echo "--- alpine ---"; . /etc/os-release; echo "$PRETTY_NAME"; echo "--- memory ---"; free -m; echo "--- disk ---"; df -h / ; echo "--- board ---"; cat /proc/device-tree/model 2>/dev/null; echo' >"$DIAG" 2>/dev/null; then
@@ -93,4 +93,18 @@ echo '```'
 
 # Tidy up.
 kill -9 "$QEMU_PID" 2>/dev/null || true
+
+# The boot proof is only valid if the image actually reached a login shell.
+# $DIAG is empty when the kernel panicked, when root= pointed at the wrong
+# device, or when the console driver never came up. Publishing that as a
+# "boot proof" would be a lie, and the monthly release would ship a broken
+# image - so fail the step loudly instead.
+if [ ! -s "$DIAG" ]; then
+    echo "capture-boot: FAILED - the image never reached a login shell" >&2
+    echo "capture-boot: no SSH diagnostics collected (see the QEMU console log above)" >&2
+    rm -rf "$WORK"
+    exit 1
+fi
+
 rm -rf "$WORK"
+exit 0
