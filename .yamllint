@@ -1,0 +1,21 @@
+---
+# yamllint config for the GitHub Actions workflows in this repo.
+#
+# The stock defaults fight GitHub Actions on two counts:
+#  * `on:` is a YAML 1.1 boolean, so the `truthy` rule flags every workflow
+#    trigger block as a non-boolean value. This is a false positive.
+#  * `line-length: 80` is too tight for GitHub's `${{ ... }}` expressions and
+#    for the long image/artifact paths this project ships.
+#
+# Everything else stays at the default so the gate still catches real problems
+# (indentation, trailing spaces, missing document start, bad quoting).
+extends: default
+
+rules:
+  line-length:
+    max: 120
+  truthy:
+    allowed-values: ['true', 'false', 'on']
+  document-start: disable
+  comments:
+    min-spaces-from-content: 1

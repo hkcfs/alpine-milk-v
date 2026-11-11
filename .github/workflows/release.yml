@@ -4,12 +4,12 @@ name: Monthly image release
 # Alpine) for the Milk-V Duo 256M (riscv / SG2002), boot it in QEMU to PROVE it
 # works, and publish a release whose notes contain the full boot log + diagnostics
 # (auto-build proof, same idea as nuttx-sg2000 releases).
-# NOTE: riscv is the primary, mainline-kernel target. arm64 uses the vendor
-# kernel from scpcom/linux (~ v5.10.260) which DOES support the Duo 256M's
-# Cortex-A53 core and ships the real board DTB (cv181x_milkv_duo256m_sd.dtb),
-# so it is intended to boot on real hardware. It is still marked experimental
-# here pending user validation on the physical board; the QEMU boot proof uses
-# -machine virt (which supplies its own DTB).
+# NOTE: BOTH architectures build the SAME vanilla mainline Linux (the latest
+# stable release) with the shared SG2002/SG200x patch series in kernel/patches.
+# riscv is the primary target; arm64 uses our own SG2002 arm64 device tree
+# (patch 0058) and the mainline arm64 defconfig. Both are still marked
+# experimental pending user validation on the physical board; the QEMU boot
+# proof uses -machine virt (which supplies its own DTB).
 on:
   schedule:
     - cron: '37 4 1 * *'          # 1st of every month 04:37 UTC
@@ -37,8 +37,25 @@ jobs:
       - name: Install QEMU / sshpass / mtools / buildx
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-riscv64 qemu-system-arm \
-            sshpass mtools
+          # NOTE: `qemu-system-riscv64` is a VIRTUAL package on Ubuntu >= 25.10
+          # (what ubuntu-latest now runs, e.g. 26.04 "resolute"). It is merely
+          # provided by the real `qemu-system-riscv` / `qemu-system-riscv-hwe`
+          # packages, so installing the virtual name fails with:
+          #   E: Package 'qemu-system-riscv64' has no installation candidate
+          # The package `qemu-system-riscv` still ships the BINARY we exec
+          # (/usr/bin/qemu-system-riscv64), so install the package names and
+          # fall back to the -hwe variants, then verify the binaries exist.
+          for pkg in qemu-system-riscv qemu-system-arm; do
+            sudo apt-get install -y "$pkg" \
+              || sudo apt-get install -y "${pkg}-hwe" \
+              || true
+          done
+          # Meta-package fallback: pulls in every qemu-system-<arch> build.
+          sudo apt-get install -y qemu-system-misc || true
+          sudo apt-get install -y sshpass mtools util-linux
+          # Fail loudly here rather than halfway through the 40-minute build.
+          command -v qemu-system-riscv64
+          command -v qemu-system-aarch64
 
       # Build the builder image *in this job* straight from the committed
       # Dockerfile. We deliberately DO NOT pull a prebuilt ghcr.io image and DO
@@ -89,8 +106,8 @@ jobs:
           {
             echo "# Milk-V Duo 256M (${{ matrix.arch }}) - $(date +'%Y-%m')"
             echo
-            echo "Auto-built from the Linux kernel (riscv: latest stable; arm64: vendor"
-            echo "scpcom/linux) and Alpine Linux, then booted in QEMU to prove it works"
+            echo "Auto-built from the latest stable mainline Linux kernel and"
+            echo "Alpine Linux, then booted in QEMU to prove it works"
             echo "(see the build + boot log below)."
             echo
             echo "Note: this is boot-proven in QEMU only; real-hardware validation on"
@@ -173,12 +190,13 @@ jobs:
             echo "# Milk-V Duo 256M (SG2002) auto-built images - $(date +'%Y-%m')"
             echo
             echo "Automatically built from the latest stable Linux kernel and the"
-            echo "latest Alpine Linux for the Milk-V Duo 256M (riscv / SG2002)."
-            echo "Two kernels are provided:"
-            echo "  - riscv: latest mainline Linux (7.1.3) with SG2002 board support"
-            echo "    (device tree + vendor drivers ported from the vendor tree)."
-            echo "  - arm64: vendor scpcom/linux kernel (~ v5.10.260) targeting the"
-            echo "    SG2002's Cortex-A53 core; it ships the real, tested board DTB."
+            echo "latest Alpine Linux for the Milk-V Duo 256M (SG2002)."
+            echo "Both images run the SAME vanilla mainline Linux (latest stable)"
+            echo "with our SG2002/SG200x patch series; they differ only in the"
+            echo "architecture, the kernel config and the board device tree:"
+            echo "  - riscv: mainline Linux on the SG2002's C906 core"
+            echo "  - arm64: mainline Linux on the SG2002's Cortex-A53 core,"
+            echo "    using our own SG2002 arm64 device tree (patch 0058)"
             echo
             echo "Both images are boot-proven in QEMU only. Neither has yet been"
             echo "validated on the physical Duo 256M board - please report back if"
@@ -200,7 +218,7 @@ jobs:
             echo "## Combined download"
             echo
              echo "  - \`alpine-milkv-duo256m-riscv.img.gz\` (mainline kernel, RISC-V)"
-             echo "  - \`alpine-milkv-duo256m-arm64.img.gz\` (vendor kernel, ARM64)"
+             echo "  - \`alpine-milkv-duo256m-arm64.img.gz\` (mainline kernel, ARM64)"
              echo
              echo "## Full build logs"
              echo
