@@ -4,6 +4,21 @@ set -e
 [ "$EUID" -ne 0 ] && { echo "must be root"; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+# Reach the Ubuntu archives through the first mirror that answers. The hosted
+# runners and the build host both occasionally fail to resolve *.ubuntu.com,
+# which leaves apt retrying DNS for half an hour.
+APT_HELPER="$(dirname "$0")/ci/apt-mirror.sh"
+if [ -f "$APT_HELPER" ]; then
+    # shellcheck source=scripts/ci/apt-mirror.sh
+    . "$APT_HELPER"
+else
+    echo "apt-mirror.sh not found, using plain apt" >&2
+    apt_update() { apt-get update; }
+    apt_install() { apt-get install -y --no-install-recommends "$@"; }
+    apt_upgrade() { apt-get upgrade -y; }
+fi
 
 BUILD_DEPS=(qemu-user-static binfmt-support dpkg-cross \
   arch-test mmdebstrap fakechroot \
@@ -47,8 +62,8 @@ Architectures: amd64
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
 
-apt-get update
-apt-get upgrade -y
+apt_update
+apt_upgrade
 
 echo "Checking dependencies..."
 for pkg in "${BUILD_DEPS[@]}"; do
@@ -61,7 +76,7 @@ for pkg in "${BUILD_DEPS[@]}"; do
 done
 echo "Installing dependencies..."
 if [ ! ${#MISSING_DEPS[@]} -eq 0 ]; then
-    apt-get install --no-install-recommends -y "${MISSING_DEPS[@]}"
+    apt_install "${MISSING_DEPS[@]}"
 fi
 echo "OK."
 
@@ -83,7 +98,7 @@ if [ -n "$DOCKER_BUILD" ]; then
     cp /usr/bin/qemu-aarch64-static /usr/local/bin/ 2>/dev/null || true
     # Register binfmt if not already done
     if [ ! -f /proc/sys/fs/binfmt_misc/qemu-riscv64 ]; then
-        apt-get install -y --no-install-recommends binfmt-support qemu-user-static
+        apt_install binfmt-support qemu-user-static
         update-binfmts --enable qemu-riscv64 2>/dev/null || true
         update-binfmts --enable qemu-aarch64 2>/dev/null || true
     fi

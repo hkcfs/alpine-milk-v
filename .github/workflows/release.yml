@@ -38,37 +38,12 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Install QEMU / sshpass / mtools / buildx
-        env:
-          DEBIAN_FRONTEND: noninteractive
-          NEEDRESTART_MODE: a
         run: |
-          # NOTE: `qemu-system-riscv64` is a VIRTUAL package on Ubuntu >= 25.10
-          # (what ubuntu-latest became, e.g. 26.04 "resolute"). It is merely
-          # provided by the real `qemu-system-riscv` / `qemu-system-riscv-hwe`
-          # packages, so installing the virtual name fails with:
-          #   E: Package 'qemu-system-riscv64' has no installation candidate
-          # The package `qemu-system-riscv` still ships the BINARY we exec
-          # (/usr/bin/qemu-system-riscv64), so install the package names and
-          # fall back to the -hwe variants.
-          #
-          # Keep apt bounded. A runner whose DNS cannot resolve the Ubuntu
-          # archives otherwise stalls for half an hour on apt's DNS retry
-          # backoff, which is indistinguishable from a hang.
-          APT_OPTS="-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
-          sudo timeout --kill-after=30s 300s apt-get $APT_OPTS update
-          for pkg in qemu-system-riscv qemu-system-arm; do
-            sudo timeout --kill-after=30s 600s \
-              apt-get $APT_OPTS install -y --no-install-recommends "$pkg" \
-              || sudo timeout --kill-after=30s 600s \
-                 apt-get $APT_OPTS install -y --no-install-recommends "${pkg}-hwe" \
-              || echo "::warning::could not install $pkg"
-          done
-          sudo timeout --kill-after=30s 600s \
-            apt-get $APT_OPTS install -y --no-install-recommends \
-            sshpass mtools util-linux
-          # Fail loudly here rather than halfway through the 40-minute build.
-          command -v qemu-system-riscv64
-          command -v qemu-system-aarch64
+          # scripts/ci/install-qemu.sh installs the right package names for
+          # every Ubuntu layout and falls back to alternative Ubuntu mirrors
+          # when the runner cannot resolve *.ubuntu.com (which otherwise
+          # stalls apt for half an hour).
+          bash scripts/ci/install-qemu.sh
 
       # Build the builder image *in this job* straight from the committed
       # Dockerfile. We deliberately DO NOT pull a prebuilt ghcr.io image and DO
