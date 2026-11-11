@@ -35,6 +35,9 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Install QEMU / sshpass / mtools / buildx
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
           sudo apt-get update
           # NOTE: `qemu-system-riscv64` is a VIRTUAL package on Ubuntu >= 25.10
@@ -44,14 +47,12 @@ jobs:
           #   E: Package 'qemu-system-riscv64' has no installation candidate
           # The package `qemu-system-riscv` still ships the BINARY we exec
           # (/usr/bin/qemu-system-riscv64), so install the package names and
-          # fall back to the -hwe variants, then verify the binaries exist.
+          # fall back to the -hwe variants.
           for pkg in qemu-system-riscv qemu-system-arm; do
             sudo apt-get install -y "$pkg" \
               || sudo apt-get install -y "${pkg}-hwe" \
-              || true
+              || echo "::warning::could not install $pkg"
           done
-          # Meta-package fallback: pulls in every qemu-system-<arch> build.
-          sudo apt-get install -y qemu-system-misc || true
           sudo apt-get install -y sshpass mtools util-linux
           # Fail loudly here rather than halfway through the 40-minute build.
           command -v qemu-system-riscv64
