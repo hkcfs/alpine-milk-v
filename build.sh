@@ -175,22 +175,19 @@ if [ -z "$LATEST_STABLE" ]; then
 fi
 echo "Latest stable kernel: $LATEST_STABLE"
 LATEST_MAJOR=$(echo "$LATEST_STABLE" | cut -d. -f1)
-KERNEL_TAG="v${LATEST_STABLE}"
 
 KERNEL_DIR="/project/kernel/linux"
 
 # Select patches, defconfig and kernel source based on architecture.
-# Both architectures build the SAME vanilla mainline kernel; only the arch
-# and the board DTB differ. arm64 is mainline since our own SG2002 arm64
-# device tree landed (kernel/dts-arm64/), which the vendor scpcom 5.10 tree
-# used to be needed for.
+# Both architectures build the SAME vanilla mainline kernel; only the arch,
+# the defconfig and the board DTB differ. arm64 is mainline too: our own SG2002
+# arm64 device tree (patch 0058) replaced the vendor scpcom 5.10 tree.
 if [ "$ARCH_TARGET" = "arm64" ]; then
     PATCHES_DIR="/project/kernel/patches"
     KERNEL_DEFCONFIG="milkv-${BOARD}-arm64_defconfig"
     KERNEL_MODE="vanilla"
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE (arm64)"
-    DTS_SRC=""
     # Our own arm64 SG2002 board DTB (added by the 0058 patch).
     BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
 else
@@ -199,7 +196,6 @@ else
     KERNEL_MODE="vanilla"
     KERNEL_REF="$LATEST_STABLE"
     KERNEL_DISPLAY="Linux $LATEST_STABLE"
-    DTS_SRC=""
     # The board DTB comes from the 0036 patch in the series
     # (sg2002-milkv-duo-256m.dts -> sg2002-milkv-duo-256m.dtb).
     BOARD_DTB="sophgo/sg2002-milkv-duo-256m.dtb"
@@ -287,11 +283,8 @@ KBUILD_LOG="/project/images/${ARCH_TARGET}/kernel-build.log"
 # e.g. a board DTB that was removed). This keeps the persistent kernel-source
 # volume correct across patch edits instead of leaving stale incremental state.
 PREPARE_STAMP="$KERNEL_DIR/.alpine-milkv-prepared"
-if [ "${ARCH_TARGET}" = "riscv" ]; then
-    DEFCONFIG_SRC="/project/kernel/${KERNEL_DEFCONFIG}"
-else
-    DEFCONFIG_SRC="/project/kernel/arm64-sg200x/defconfig"
-fi
+# KERNEL_DEFCONFIG is per-arch (set above), so the same path works for both.
+DEFCONFIG_SRC="/project/kernel/${KERNEL_DEFCONFIG}"
 PREPARE_HASH=$( ( ls -1 "$PATCHES_DIR"/*.patch 2>/dev/null; cat "$PATCHES_DIR"/*.patch 2>/dev/null; \
                   cat "$DEFCONFIG_SRC" 2>/dev/null ) | md5sum | cut -d' ' -f1 )
 echo "MARK1B: PATCHES_DIR=$PATCHES_DIR DEFCONFIG_SRC=$DEFCONFIG_SRC HASH=$PREPARE_HASH"
@@ -326,7 +319,6 @@ fi
 echo ""
 echo "=== Applying patches ==="
 APPLIED=0
-FAILED=0
  SKIPPED=0
  mkdir -p /project/images
 echo "Patch report for $KERNEL_DISPLAY" > "$PATCH_LOG"
@@ -359,17 +351,15 @@ fi
 echo ""
 echo "Patch summary: $APPLIED applied, $SKIPPED skipped"
 
-# For arm64 (vendor scpcom kernel) the board DTS + its .dtsi includes and the
-# defconfig live in our repo, NOT upstream. Copy them into the kernel tree now so
-# `make` finds them. The vendor DTS includes many cvitek/*.dtsi files which must
-# all be present alongside the board DTS.
+# For arm64 the board DTS + its .dtsi live in our repo, NOT upstream, but they
+# arrive with the shared patch series (patch 0058 adds
+# arch/arm64/boot/dts/sophgo/sg2002-milkv-duo-256m.dts + sg2002.dtsi), so
+# nothing has to be copied into the kernel tree here. The vendor cvitek/*.dtsi
+# includes are NOT needed: that was the scpcom 5.10 tree, which is gone.
 if [ "$ARCH_TARGET" = "arm64" ]; then
-    echo "Copying Duo 256M arm64 DTS + includes + defconfig into kernel tree..."
-    mkdir -p arch/arm64/boot/dts/sophgo
-    cp arch/arm64/boot/dts/cvitek/*.dtsi arch/arm64/boot/dts/sophgo/ 2>/dev/null || true
-    cp "$DTS_SRC"/*.dts arch/arm64/boot/dts/sophgo/ 2>/dev/null || true
+    echo "Staging Duo 256M arm64 defconfig into kernel tree..."
     mkdir -p arch/arm64/configs
-    cp /project/kernel/arm64-sg200x/defconfig arch/arm64/configs/duo256m_defconfig
+    cp "$DEFCONFIG_SRC" arch/arm64/configs/duo256m_defconfig
 fi
 
 # Ensure our board DTB is registered in the sophgo Makefile for this arch
@@ -394,16 +384,11 @@ echo "Summary: $APPLIED applied, $SKIPPED skipped" >> "$PATCH_LOG"
 # Use our defconfig
 echo ""
 echo "Configuring kernel..."
-if [ "$ARCH_TARGET" = "arm64" ]; then
-    # arm64 uses the scpcom Duo 256M defconfig directly (no slim/source
-    # fragmentation): it already targets only this SoC family, exactly as the
-    # working sophgo-sg200x-debian build does.
-    cp /project/kernel/arm64-sg200x/defconfig .config
-    make olddefconfig 2>/dev/null
-else
-    cp /project/kernel/"$KERNEL_DEFCONFIG" .config
-    make olddefconfig 2>/dev/null
-fi
+# KERNEL_DEFCONFIG is per-arch (milkv-duo256m_defconfig / milkv-duo256m-arm64_defconfig).
+# Both are mainline configs; the arm64 one carries CONFIG_ARCH_SOPHGO=y, which is
+# what makes arch/arm64/boot/dts/sophgo/Makefile build our board DTB at all.
+cp "/project/kernel/$KERNEL_DEFCONFIG" .config
+make olddefconfig 2>/dev/null
 
 # Enable virtio for QEMU testing
 sed -i 's/^# CONFIG_VIRTIO_BLK is not set/CONFIG_VIRTIO_BLK=y/' .config
@@ -631,7 +616,7 @@ cp $BOOTLOADER_DIR/fip.bin$OVERDRIVE "$OUTDIR/fip.bin" 2>/dev/null || \
 echo "OK."
 
 # Copy kernel to boot partition for genimage
-rm -rf "$OUTDIR/boot"
+rm -rf "${OUTDIR:?}/boot"
 mkdir -p "$OUTDIR/boot"
 cp "$KERNEL_OUT/Image" "$OUTDIR/boot/"
 cp -r "$KERNEL_OUT/dtb" "$OUTDIR/boot/" 2>/dev/null || true
